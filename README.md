@@ -10,7 +10,7 @@ This is TheTrueHat server implementation in C. Now only one room is supported, a
 1. Run `make`
 
 ## Run
-1. Run `./tth` and go to http://localhost:5000.
+1. Run `./tth` and go to http://localhost:5000
 
 ## License
 MIT
