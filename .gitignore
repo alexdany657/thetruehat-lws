@@ -1,0 +1,11 @@
+# libraries
+lib/*
+
+# o-files
+*.o
+
+# main executable
+tth
+
+# vim tmp files
+*.swp
