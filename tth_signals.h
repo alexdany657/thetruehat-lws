@@ -7,8 +7,10 @@
 
 int tth_sMessage(void *vhd, void *pss, void *_amsg, void *_aseverity, void *_asignal);
 
-int tth_sPlayerJoined(void *_vhd, void *pss, void *_ausername);
+int tth_sPlayerJoined(void *vhd, void *pss, void *_ausername);
 
-int tth_sPlayerLeft(void *_vhd, void *pss, void *_ausername);
+int tth_sPlayerLeft(void *vhd, void *pss, void *_ausername);
+
+int tth_sYouJoined(void *vhd, void *pss, void *_puser);
 
 #endif

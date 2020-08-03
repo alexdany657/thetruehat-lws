@@ -22,6 +22,8 @@ enum tth_code tth_get_code(char *msg, int len) {
             return TTH_CODE_SERVER_PLAYER_JOINED;
         case TTH_CODE_SERVER_PLAYER_LEFT:
             return TTH_CODE_SERVER_PLAYER_LEFT;
+        case TTH_CODE_SERVER_YOU_JOINED:
+            return TTH_CODE_SERVER_YOU_JOINED;
         case TTH_CODE_CLIENT_JOIN_ROOM:
             return TTH_CODE_CLIENT_JOIN_ROOM;
         case TTH_CODE_CLIENT_LEAVE_ROOM:

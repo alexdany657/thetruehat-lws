@@ -1,6 +1,8 @@
+#include "tth_signals.h"
+
 #include "tth_misc.h"
 
-#include "tth_signals.h"
+#include "tth_json.h"
 
 #include "cJSON/cJSON.h"
 #include <libwebsockets.h>
@@ -16,7 +18,7 @@ int __tth_add_dest(struct msg *pmsg, struct per_session_data__tth *pss) {
     }
     memset(pdest, 0, sizeof(struct dest_data__tth));
     pdest->pss = pss;
-    pdest->clientId = pss->clientId;
+    pdest->client_id = pss->client_id;
     lws_ll_fwd_insert(pdest, dest_list, pmsg->dest_list);
     return 0;
 }
@@ -84,13 +86,13 @@ int __tth_send_signal(void *_vhd, void *_pss, enum tth_dest_code dest_code, enum
     lws_start_foreach_llp(struct msg **, ppmsg, vhd->msg_list) {
         lwsl_user("msg: payload: %s\n", (char *)((*ppmsg)->payload + LWS_PRE));
         lws_start_foreach_llp(struct dest_data__tth **, ppdd, (*ppmsg)->dest_list) {
-            lwsl_user("dest: clientId %i\n", (*ppdd)->clientId);
+            lwsl_user("dest: client_id %i\n", (*ppdd)->client_id);
         } lws_end_foreach_llp(ppdd, dest_list);
     } lws_end_foreach_llp(ppmsg, msg_list);
     lwsl_user("\n");
 
     lws_start_foreach_llp(struct per_session_data__tth **, ppss, vhd->pss_list) {
-        lwsl_user("pss: clientId: %i\n", (*ppss)->clientId);
+        lwsl_user("pss: client_id: %i\n", (*ppss)->client_id);
     } lws_end_foreach_llp(ppss, pss_list);
 
     return 0;
@@ -138,9 +140,8 @@ int tth_sMessage(void *vhd, void *pss, void *_amsg, void *_aseverity, void *_asi
     return 0;
 }
 
-int tth_sPlayerJoined(void *_vhd, void *pss, void *_ausername) {
+int tth_sPlayerJoined(void *vhd, void *pss, void *_ausername) {
     char *ausername = (char *)_ausername;
-    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
 
     cJSON *_data = cJSON_CreateObject();
     if (!_data) {
@@ -153,44 +154,13 @@ int tth_sPlayerJoined(void *_vhd, void *pss, void *_ausername) {
     }
     cJSON_AddItemToObjectCS(_data, "username", _username);
 
-    cJSON *_users = cJSON_CreateArray();
+    cJSON *_users = (cJSON *)tth_get_playerList(vhd);
     if (!_users) {
         return 1;
     }
     cJSON_AddItemToObjectCS(_data, "playerList", _users);
 
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        cJSON *__user = cJSON_CreateObject();
-        if (!__user) {
-            break;
-        }
-
-        cJSON *__username = cJSON_CreateString((*ppud)->username);
-        if (!__username) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "username", __username);
-
-        cJSON *__online = cJSON_CreateBool((*ppud)->online);
-        if (!__online) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "online", __online);
-
-        cJSON_AddItemToArray(_users, __user);
-    } lws_end_foreach_llp(ppud, user_list);
-
-    char *ahost = NULL;
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        if ((*ppud)->online) {
-            ahost = (*ppud)->username;
-            break;
-        }
-    } lws_end_foreach_llp(ppud, user_list);
-    if (!ahost) {
-        ahost = "";
-    }
-    cJSON *_host = cJSON_CreateString(ahost);
+    cJSON *_host = (cJSON *)tth_get_host(vhd);
     if (!_host) {
         return 1;
     }
@@ -207,9 +177,8 @@ int tth_sPlayerJoined(void *_vhd, void *pss, void *_ausername) {
     return 0;
 }
 
-int tth_sPlayerLeft(void *_vhd, void *pss, void *_ausername) {
+int tth_sPlayerLeft(void *vhd, void *pss, void *_ausername) {
     char *ausername = (char *)_ausername;
-    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
 
     cJSON *_data = cJSON_CreateObject();
     if (!_data) {
@@ -222,44 +191,13 @@ int tth_sPlayerLeft(void *_vhd, void *pss, void *_ausername) {
     }
     cJSON_AddItemToObjectCS(_data, "username", _username);
 
-    cJSON *_users = cJSON_CreateArray();
+    cJSON *_users = (cJSON *)tth_get_playerList(vhd);
     if (!_users) {
         return 1;
     }
     cJSON_AddItemToObjectCS(_data, "playerList", _users);
 
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        cJSON *__user = cJSON_CreateObject();
-        if (!__user) {
-            break;
-        }
-
-        cJSON *__username = cJSON_CreateString((*ppud)->username);
-        if (!__username) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "username", __username);
-
-        cJSON *__online = cJSON_CreateBool((*ppud)->online);
-        if (!__online) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "online", __online);
-
-        cJSON_AddItemToArray(_users, __user);
-    } lws_end_foreach_llp(ppud, user_list);
-
-    char *ahost = NULL;
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        if ((*ppud)->online) {
-            ahost = (*ppud)->username;
-            break;
-        }
-    } lws_end_foreach_llp(ppud, user_list);
-    if (!ahost) {
-        ahost = "";
-    }
-    cJSON *_host = cJSON_CreateString(ahost);
+    cJSON *_host = (cJSON *)tth_get_host(vhd);
     if (!_host) {
         return 1;
     }
@@ -270,6 +208,49 @@ int tth_sPlayerLeft(void *_vhd, void *pss, void *_ausername) {
         return 1;
     }
     __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_PLAYER_LEFT, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sYouJoined(void *vhd, void *pss, void *_puser) {
+    struct user_data__tth *puser = (struct user_data__tth *)_puser;
+
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_users = (cJSON *)tth_get_playerList(vhd);
+    if (!_users) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "playerList", _users);
+
+    cJSON *_host = (cJSON *)tth_get_host(vhd);
+    if (!_host) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "host", _host);
+
+    cJSON *_state = (cJSON *)tth_get_state(vhd);
+    if (!_state) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "state", _state);
+
+    cJSON *_substate = (cJSON *)tth_get_substate(vhd);
+    if (_substate) {
+        cJSON_AddItemToObjectCS(_data, "substate", _substate);
+    }
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_THIS_CLIENT, TTH_CODE_SERVER_YOU_JOINED, json_msg);
     cJSON_Delete(_data);
     cJSON_free(json_msg);
 

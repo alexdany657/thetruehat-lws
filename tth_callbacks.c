@@ -119,7 +119,7 @@ int tth_callback_client_join_room(void *_pss, void *_vhd, char *msg, int len) {
     struct user_data__tth *puser_pss = NULL;
     struct user_data__tth *puser = NULL;
     lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        if ((*ppud)->clientId == pss->clientId) {
+        if ((*ppud)->client_id == pss->client_id) {
             puser_pss = *ppud;
         }
         if (!strcmp((*ppud)->username, username)) {
@@ -148,7 +148,7 @@ int tth_callback_client_join_room(void *_pss, void *_vhd, char *msg, int len) {
 
     // check if data is valid
     if (puser->online) {
-        lwsl_user("Failure: user %i is already in room\n", pss->clientId);
+        lwsl_user("Failure: user %i is already in room\n", pss->client_id);
         tth_sMessage(vhd, pss, "Username is already in use", "error", "cJoinRoom");
         return 1;
     }
@@ -158,9 +158,10 @@ int tth_callback_client_join_room(void *_pss, void *_vhd, char *msg, int len) {
     puser->time_zone_offset = time_zone_offset;
     puser->online = 1;
     puser->pss = pss;
-    puser->clientId = pss->clientId;
+    puser->client_id = pss->client_id;
 
     tth_sPlayerJoined(vhd, pss, username);
+    tth_sYouJoined(vhd, pss, puser);
 
     return 0;
 }
@@ -177,7 +178,7 @@ int tth_callback_client_leave_room(void *_pss, void *_vhd, char *msg, int len) {
     // finding user with this pss
     struct user_data__tth *puser = NULL;
     lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        if ((*ppud)->clientId == pss->clientId) {
+        if ((*ppud)->client_id == pss->client_id) {
             puser = *ppud;
             break;
         }
@@ -192,14 +193,14 @@ int tth_callback_client_leave_room(void *_pss, void *_vhd, char *msg, int len) {
 
     // check if data is valid
     if (!puser->online) {
-        lwsl_user("Failure: user %i not in room\n", pss->clientId);
+        lwsl_user("Failure: user %i not in room\n", pss->client_id);
         tth_sMessage(vhd, pss, "You are not in room", "error", "cLeaveRoom");
         return 1;
     }
  
     // marking user offline
     puser->online = 0;
-    puser->clientId = 0;
+    puser->client_id = 0;
     puser->pss = NULL;
     
     tth_sPlayerLeft(vhd, pss, puser->username);

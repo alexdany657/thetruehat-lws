@@ -13,6 +13,7 @@
 #include "tth_structs.h"
 
 #include "tth_callbacks.h"
+#include "tth_signals.h"
 #include "tth_codes.h"
 
 static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
@@ -27,6 +28,21 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->vhost = lws_get_vhost(wsi);
             vhd->clientCnt = 1;
             vhd->msg_list = NULL;
+            vhd->info = malloc(sizeof(struct info__tth));
+            if (!vhd->info) {
+                lwsl_user("OOM: dropping");
+                return 1;
+            }
+            memset(vhd->info, 0, sizeof(struct info__tth));
+            vhd->info->settings = malloc(sizeof(struct settings__tth));
+            if (!vhd->info->settings) {
+                lwsl_user("OOM: dropping");
+                return 1;
+            }
+            memset(vhd->info->settings, 0, sizeof(struct settings__tth));
+
+            vhd->info->state = TTH_STATE_WAIT;
+            vhd->info->substate = TTH_SUBSTATE_UNDEFINED;
             break;
 
         case LWS_CALLBACK_ESTABLISHED:
@@ -34,18 +50,18 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             lws_ll_fwd_insert(pss, pss_list, vhd->pss_list);
             pss->wsi = wsi;
             lwsl_user("initial wsi: %p\n", wsi);
-            pss->clientId = vhd->clientCnt++;
+            pss->client_id = vhd->clientCnt++;
             break;
 
         case LWS_CALLBACK_CLOSED:
-            lwsl_user("pss: close: clientId %i\n", pss->clientId);
+            lwsl_user("pss: close: client_id %i\n", pss->client_id);
             /* remove our closing pss from the list of live pss */
             lws_ll_fwd_remove(struct per_session_data__tth, pss_list, pss, vhd->pss_list);
 
             /* if this client has logged in user --- we need to make it offline */
             struct user_data__tth *puser = NULL;
             lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-                if ((*ppud)->clientId == pss->clientId) {
+                if ((*ppud)->client_id == pss->client_id) {
                     puser = *ppud;
                     break;
                 }
@@ -53,6 +69,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             if (puser) {
                 puser->online = 0;
                 puser->pss = NULL;
+                tth_sPlayerLeft(vhd, pss, puser->username);
             }
             break;
 
@@ -65,7 +82,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                     lws_start_foreach_llp(struct dest_data__tth **, ppdd, (*ppmsg)->dest_list) {
                         if (!((*ppdd)->sent)) {
                             shouldDelete = 0;
-                            if ((*ppdd)->clientId == pss->clientId) {
+                            if ((*ppdd)->client_id == pss->client_id) {
                                 if (writed) {
                                     break;
                                 }

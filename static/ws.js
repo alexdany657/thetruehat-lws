@@ -4,6 +4,7 @@ __SIGNAL_CODES = {
     "sMessage": 0,
     "sPlayerJoined": 1,
     "sPlayerLeft": 2,
+    "sYouJoined": 3,
     "cJoinRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 0,
     "cLeaveRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 1
 }
