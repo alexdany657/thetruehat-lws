@@ -222,20 +222,17 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
 
     _username = cJSON_GetObjectItemCaseSensitive(_data, "username");
     if (!cJSON_IsString(_username)) {
-        lwsl_user("Improper type of field `username`, not a string\n");
         tth_sMessage(vhd, pss, "Improper type of field `username`, not a string", "error", "cJoinRoom");
         return 1;
     }
     
     _time_zone_offset = cJSON_GetObjectItemCaseSensitive(_data, "time_zone_offset");
     if (!cJSON_IsNumber(_time_zone_offset)) {
-        lwsl_user("Improper type of field `time_zone_offset`, not a number\n");
         tth_sMessage(vhd, pss, "Improper type of field `time_zone_offset`, not a number", "error", "cJoinRoom");
         return 1;
     }
 
     if (*(_username->valuestring) == 0) {
-        lwsl_user("Improper value of field `username`, <empty string>\n");
         tth_sMessage(vhd, pss, "Username can't be emty", "error", "cJoinRoom");
         return 1;
     }
@@ -265,7 +262,6 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
 
     // if user is already in room
     if (puser_pss) {
-        lwsl_user("Failure: client is already in room\n");
         tth_sMessage(vhd, pss, "Client is already in room", "error", "cJoinRoom");
         return 1;
     }
@@ -288,7 +284,6 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
 
     // check if data is valid
     if (puser->online) {
-        lwsl_user("Failure: user %i is already in room\n", pss->client_id);
         tth_sMessage(vhd, pss, "Username is already in use", "error", "cJoinRoom");
         return 1;
     }
@@ -461,24 +456,6 @@ int tth_callback_client_start_game(void *_vhd, void *_pss) {
     tth_sGameStarted(vhd, pss);
 
     return 0;
-    // Junk for testing setTimeout
-
-    struct timeval *time = malloc(sizeof(struct timeval));
-    if (!time) {
-        return 1;
-    }
-    time->tv_sec = vhd->info->settings->explanation_time / 1000;
-    time->tv_usec = vhd->info->settings->explanation_time % 1000 * 1000000;
-    struct __stop_explanation_args *args = malloc(sizeof(struct __stop_explanation_args));
-    if (!args) {
-        return 1;
-    }
-    args->vhd = vhd;
-    args->pss = pss;
-    args->number_of_turn = vhd->info->number_of_turn;
-    tth_set_timeout(time, &__stop_explanation, args);
-
-    return 0;
 }
 
 int tth_callback_client_speaker_ready(void *_vhd, void *_pss) {
@@ -597,7 +574,7 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
 
     lwsl_user("tth_callback_client_end_word_explanation\n");
 
-    // finding user with this pss and counting they pos
+    // finding user with this pss and counting their pos
     struct user_data__tth *puser = NULL;
     int pos = 0;
     lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
@@ -624,7 +601,47 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
         return 1;
     }
 
-    // 
+    // checking if user is speaker
+    if (pos != vhd->info->speaker_pos) {
+        tth_sMessage(vhd, pss, "Only speaker can send this signal", "error", "cEndWordExplanation");
+        return 1;
+    }
+
+    // processing input data
+    cJSON *_cause;
+    cJSON *_data = cJSON_ParseWithLength(msg, len);
+    if (!_data) {
+        tth_sMessage(vhd, pss, "Server error", "error", "cEndWordExplanation");
+        return 1;
+    }
+    
+    _cause = cJSON_GetObjectItemCaseSensitive(_data, "cause");
+    if (!cJSON_IsString(_cause)) {
+        tth_sMessage(vhd, pss, "Improper type of field `cause`, not a string", "error", "cEndWordExplanation");
+        return 1;
+    }
+
+    enum tth_cause_code cause;
+    if (!strcmp(_cause, "explained")) {
+        cause = TTH_CAUSE_CODE_EXPLAINED;
+    } else if (!strcmp(_cause, "mistake")) {
+        cause = TTH_CAUSE_CODE_MISTAKE;
+    } else if (!strcmp(_cause, "notExplained")) {
+        cause = TTH_CAUSE_CODE_NOT_EXPLAINED;
+    } else {
+        cause = TTH_CAUSE_CODE_INVALID;
+        tth_sMessage(vhd, pss, "Improper value of field `cause`", "error", "cEndWordExplanation");
+        return 1;
+    }
+
+    switch (cause) {
+        case TTH_CAUSE_CODE_EXPLAINED:
+            break;
+        case TTH_CAUSE_CODE_MISTAKE:
+            break;
+        case TTH_CAUSE_CODE_NOT_EXPLAINED:
+            break;
+    }
 
     return 0;
 }

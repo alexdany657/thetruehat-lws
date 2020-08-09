@@ -36,6 +36,13 @@ enum tth_dest_code {
     TTH_DEST_CODE_SPEAKER = 4
 };
 
+enum tth_cause_code {
+    TTH_CAUSE_CODE_INVALID = 0,
+    TTH_CAUSE_CODE_EXPLAINED = 1,
+    TTH_CAUSE_CODE_MISTAKE = 2,
+    TTH_CAUSE_CODE_NOT_EXPLAINED = 3
+}
+
 enum tth_state {
     TTH_STATE_INVALID = 0,
     TTH_STATE_WAIT = 1,
