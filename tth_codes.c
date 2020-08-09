@@ -24,10 +24,37 @@ enum tth_code tth_get_code(char *msg, int len) {
             return TTH_CODE_SERVER_PLAYER_LEFT;
         case TTH_CODE_SERVER_YOU_JOINED:
             return TTH_CODE_SERVER_YOU_JOINED;
+        case TTH_CODE_SERVER_GAME_STARTED:
+            return TTH_CODE_SERVER_GAME_STARTED;
+        case TTH_CODE_SERVER_EXPLANATION_STARTED:
+            return TTH_CODE_SERVER_EXPLANATION_STARTED;
+        case TTH_CODE_SERVER_NEW_WORD:
+            return TTH_CODE_SERVER_NEW_WORD;
+        case TTH_CODE_SERVER_WORD_EXPLANATION_ENDED:
+            return TTH_CODE_SERVER_WORD_EXPLANATION_ENDED;
+        case TTH_CODE_SERVER_EXPLANATION_ENDED:
+            return TTH_CODE_SERVER_EXPLANATION_ENDED;
+        case TTH_CODE_SERVER_WORDS_TO_EDIT:
+            return TTH_CODE_SERVER_WORDS_TO_EDIT;
+        case TTH_CODE_SERVER_NEXT_TURN:
+            return TTH_CODE_SERVER_NEXT_TURN;
+        case TTH_CODE_SERVER_GAME_ENDED:
+            return TTH_CODE_SERVER_GAME_ENDED;
+
         case TTH_CODE_CLIENT_JOIN_ROOM:
             return TTH_CODE_CLIENT_JOIN_ROOM;
         case TTH_CODE_CLIENT_LEAVE_ROOM:
             return TTH_CODE_CLIENT_LEAVE_ROOM;
+        case TTH_CODE_CLIENT_START_GAME:
+            return TTH_CODE_CLIENT_START_GAME;
+        case TTH_CODE_CLIENT_SPEAKER_READY:
+            return TTH_CODE_CLIENT_SPEAKER_READY;
+        case TTH_CODE_CLIENT_LISTENER_READY:
+            return TTH_CODE_CLIENT_LISTENER_READY;
+        case TTH_CODE_CLIENT_END_WORD_EXPLANATION:
+            return TTH_CODE_CLIENT_END_WORD_EXPLANATION;
+        case TTH_CODE_CLIENT_WORDS_EDITED:
+            return TTH_CODE_CLIENT_WORDS_EDITED;
     }
     return TTH_CODE_ERROR;
 }

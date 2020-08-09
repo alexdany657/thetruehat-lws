@@ -6,16 +6,31 @@
 #include <string.h>
 #include <stdint.h>
 
+struct word_data__tth {
+    struct word_data__tth *word_list;
+    char *word;
+};
+
+/* one of each is created for every dictionary */
+
+struct dict_data__tth {
+    struct dict_data__tth *dict_list;
+    char *name;
+    char **words;
+    int len;
+};
+
 /* one of each is created for every vhost for storing... */
 
 /* ...settings */
 
 struct settings__tth {
     int delay_time;
-    int exmanation_time;
+    int explanation_time;
     int aftermath_time;
     int8_t strict_mode:1;
-    int wordNumber;
+    int word_number;
+    int dictionary_id;
 };
 
 /* ...info */
@@ -24,6 +39,14 @@ struct info__tth {
     enum tth_state state;
     enum tth_substate substate;
     struct settings__tth *settings;
+    int speaker_pos;
+    int listener_pos;
+    struct dict_data__tth *dict;
+    int transport_delay;
+    int8_t speaker_ready:1;
+    int8_t listener_ready:1;
+    int number_of_turn;
+    int64_t start_time;
 };
 
 /* one of these created for each destination client */
@@ -79,6 +102,12 @@ struct per_vhost_data__tth {
     int clientCnt;
 
     struct info__tth *info;
+    
+    struct dict_data__tth *dict_list;
+
+    struct word_data__tth *fresh_words;
+
+    struct word_data__tth *used_words;
 };
 
 #endif

@@ -7,6 +7,7 @@
 #include "cJSON/cJSON.h"
 #include <libwebsockets.h>
 #include <string.h>
+#include <time.h>
 
 /* internal functions */
 
@@ -73,8 +74,18 @@ int __tth_send_signal(void *_vhd, void *_pss, enum tth_dest_code dest_code, enum
             break;
 
         case TTH_DEST_CODE_SPEAKER:
-            /* TODO: implement */
-            return 1;
+            {
+            int cnt = 0;
+            lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
+                if (cnt == vhd->info->speaker_pos) {
+                    __tth_add_dest(pmsg, (*ppud)->pss);
+                    ___ll_bck_insert(struct msg, pmsg, msg_list, vhd->msg_list);
+                    lws_callback_on_writable((*ppud)->pss->wsi);
+                }
+                cnt++;
+            } lws_end_foreach_llp(ppud, user_list);
+            return 0;
+            }
 
         case TTH_DEST_CODE_INVALID:
             return 1;
@@ -83,6 +94,7 @@ int __tth_send_signal(void *_vhd, void *_pss, enum tth_dest_code dest_code, enum
             break;
     }
 
+    /*
     lws_start_foreach_llp(struct msg **, ppmsg, vhd->msg_list) {
         lwsl_user("msg: payload: %s\n", (char *)((*ppmsg)->payload + LWS_PRE));
         lws_start_foreach_llp(struct dest_data__tth **, ppdd, (*ppmsg)->dest_list) {
@@ -94,6 +106,7 @@ int __tth_send_signal(void *_vhd, void *_pss, enum tth_dest_code dest_code, enum
     lws_start_foreach_llp(struct per_session_data__tth **, ppss, vhd->pss_list) {
         lwsl_user("pss: client_id: %i\n", (*ppss)->client_id);
     } lws_end_foreach_llp(ppss, pss_list);
+    */
 
     return 0;
 }
@@ -240,10 +253,17 @@ int tth_sYouJoined(void *vhd, void *pss, void *_puser) {
     }
     cJSON_AddItemToObjectCS(_data, "state", _state);
 
-    cJSON *_substate = (cJSON *)tth_get_substate(vhd);
-    if (_substate) {
-        cJSON_AddItemToObjectCS(_data, "substate", _substate);
+    cJSON *_settings = (cJSON *)tth_get_settings(vhd);
+    if (!_settings) {
+        return 1;
     }
+    cJSON_AddItemToObjectCS(_data, "settings", _settings);
+
+    cJSON *_substate = (cJSON *)tth_get_substate(vhd);
+    if (!_substate) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "substate", _substate);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -251,6 +271,190 @@ int tth_sYouJoined(void *vhd, void *pss, void *_puser) {
     }
 
     __tth_send_signal(vhd, pss, TTH_DEST_CODE_THIS_CLIENT, TTH_CODE_SERVER_YOU_JOINED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sGameStarted(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_speaker = (cJSON *)tth_get_speaker(vhd);
+    if (!_speaker) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "speaker", _speaker);
+
+    cJSON *_listener = (cJSON *)tth_get_listener(vhd);
+    if (!_listener) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "listener", _listener);
+
+    cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
+    if (!_words_count) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "wordsCount", _words_count);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_GAME_STARTED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sExplanationStarted(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_start_time = (cJSON *)tth_get_start_time(vhd);
+    if (!_start_time) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "startTime", _start_time);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_EXPLANATION_STARTED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sNewWord(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    // TODO
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_NEW_WORD, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sWordExplanationEnded(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    // TODO
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_WORD_EXPLANATION_ENDED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sExplanationEnded(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
+    if (!_words_count) {
+        return 1;
+    }
+    cJSON_AddItemToObjectCS(_data, "wordsCount", _words_count);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_EXPLANATION_ENDED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sWordsToEdit(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+    
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+    
+    // TODO
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_WORD_EXPLANATION_ENDED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sNextTurn(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    // TODO
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_NEXT_TURN, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sGameEnded(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    // TODO
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_GAME_ENDED, json_msg);
     cJSON_Delete(_data);
     cJSON_free(json_msg);
 

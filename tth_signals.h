@@ -13,4 +13,20 @@ int tth_sPlayerLeft(void *vhd, void *pss, void *_ausername);
 
 int tth_sYouJoined(void *vhd, void *pss, void *_puser);
 
+int tth_sGameStarted(void *vhd, void *pss);
+
+int tth_sExplanationStarted(void *vhd, void *pss);
+
+int tth_sNewWord(void *vhd, void *pss);
+
+int tth_sWordExplanationEnded(void *vhd, void *pss, void *_aword);
+
+int tth_sExplanationEnded(void *vhd, void *pss);
+
+int tth_sWordsToEdit(void *vhd, void *pss);
+
+int tth_sNextTurn(void *vhd, void *pss);
+
+int tth_sGameEnded(void *vhd, void *pss);
+
 #endif

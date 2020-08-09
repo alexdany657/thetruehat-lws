@@ -5,8 +5,14 @@ __SIGNAL_CODES = {
     "sPlayerJoined": 1,
     "sPlayerLeft": 2,
     "sYouJoined": 3,
+    "sGameStarted": 4,
+    "sExplanationStarted": 5,
+    "sExplanationEnded": 6,
     "cJoinRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 0,
-    "cLeaveRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 1
+    "cLeaveRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 1,
+    "cStartGame": __SIGNAL_CODES_CLIENT_INCREMENT + 2,
+    "cSpeakerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 3,
+    "cListenerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 4
 }
 
 function __str(a) {

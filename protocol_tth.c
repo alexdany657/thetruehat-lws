@@ -9,12 +9,69 @@
 #endif
 
 #include <string.h>
+#include <stdio.h>
 
 #include "tth_structs.h"
 
 #include "tth_callbacks.h"
 #include "tth_signals.h"
 #include "tth_codes.h"
+
+#define TRANSPORT_DELAY 1000
+
+void __load_dict(void *_vhd) {
+    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
+
+    struct dict_data__tth *new_dict = malloc(sizeof(struct dict_data__tth));
+    if (!new_dict) {
+        lwsl_user("OOM: dropping\n");
+        abort();
+    }
+    new_dict->dict_list = NULL;
+    new_dict->name = "dict.1";
+
+    FILE *fdict = fopen("dict.1", "r");
+    if (!fdict) {
+        lwsl_err("error reading dictionary from file\n");
+        abort();
+    }
+
+    int n;
+    ssize_t nread;
+    char *line = NULL;
+    size_t len = 0;
+    int cnt = 0;
+    nread = getline(&line, &len, fdict);
+    n = atoi(line);
+    new_dict->len = n;
+    new_dict->words = malloc(n * sizeof(char *));
+    nread = getline(&line, &len, fdict);
+    while (nread != -1 && cnt < n) {
+        int _len = 0;
+        while (*(line + _len)) {
+            _len++;
+        }
+        if (_len > 1 && *(line + _len - 2) == '\n') {
+            _len--;
+        }
+        char *_line = malloc(_len * sizeof(char));
+        strncpy(_line, line, _len);
+        if (_len > 0) {
+            *(_line + _len - 1) = 0;
+        }
+        *(new_dict->words+cnt) = _line;
+        nread = getline(&line, &len, fdict);
+        cnt++;
+    }
+    while (nread != -1) {
+        nread = getline(&line, &len, fdict);
+    }
+    fclose(fdict);
+
+    vhd->dict_list = new_dict;
+    vhd->info->dict = new_dict;
+
+}
 
 static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
     struct per_session_data__tth *pss = (struct per_session_data__tth *)user;
@@ -39,10 +96,18 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                 lwsl_user("OOM: dropping");
                 return 1;
             }
-            memset(vhd->info->settings, 0, sizeof(struct settings__tth));
 
             vhd->info->state = TTH_STATE_WAIT;
             vhd->info->substate = TTH_SUBSTATE_UNDEFINED;
+            vhd->info->transport_delay = TRANSPORT_DELAY;
+            vhd->info->settings->word_number = 8;
+            vhd->info->settings->delay_time = 3000;
+            vhd->info->settings->explanation_time = 40000;
+            vhd->info->settings->aftermath_time = 3000;
+            vhd->info->settings->strict_mode = 1;
+            vhd->info->dict = NULL;
+            vhd->fresh_words = NULL;
+            __load_dict(vhd);
             break;
 
         case LWS_CALLBACK_ESTABLISHED:
@@ -79,11 +144,13 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                 struct msg *pmsg_del = NULL;
                 lws_start_foreach_llp(struct msg **, ppmsg, vhd->msg_list) {
                     int8_t shouldDelete = 1;
+                    // lwsl_warn("msg:\npss client_id:%i\npayload: %s\n", pss->client_id, (char *)((*ppmsg)->payload + LWS_PRE));
                     lws_start_foreach_llp(struct dest_data__tth **, ppdd, (*ppmsg)->dest_list) {
+                        // lwsl_warn("dest client_id: %i\n", (*ppdd)->client_id);
                         if (!((*ppdd)->sent)) {
-                            shouldDelete = 0;
                             if ((*ppdd)->client_id == pss->client_id) {
                                 if (writed) {
+                                    // lwsl_warn("\n");
                                     break;
                                 }
                                 // sending message
@@ -95,13 +162,15 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                                 }
                                 writed = 1;
                                 (*ppdd)->sent = 1;
-                                shouldDelete = 1;
+                            } else {
+                                shouldDelete = 0;
                             }
                         }
                     } lws_end_foreach_llp(ppdd, dest_list);
                     if (shouldDelete) {
                         pmsg_del = *ppmsg;
                     }
+                    // lwsl_warn("\n");
                     if (writed) {
                         lws_callback_on_writable(wsi);
                         break;
@@ -109,10 +178,12 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                 } lws_end_foreach_llp(ppmsg, msg_list);
 
                 if (pmsg_del) {
+                    // lwsl_warn("deleting msg:\n");
                     lws_ll_fwd_remove(struct msg, msg_list, pmsg_del, vhd->msg_list);
                     free(pmsg_del->payload);
                     while (pmsg_del->dest_list) {
                         struct dest_data__tth *pdest_del = pmsg_del->dest_list;
+                        // lwsl_warn("dest: client_id: %i, sent: %i\n", pdest_del->client_id, pdest_del->sent);
                         lws_ll_fwd_remove(struct dest_data__tth, dest_list, pdest_del, pmsg_del->dest_list);
                         free(pdest_del);
                     }
@@ -143,10 +214,25 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
 
                 switch (code) {
                     case TTH_CODE_CLIENT_JOIN_ROOM:
-                        tth_callback_client_join_room(pss, vhd, new_in, new_len);
+                        tth_callback_client_join_room(vhd, pss, new_in, new_len);
                         break;
                     case TTH_CODE_CLIENT_LEAVE_ROOM:
-                        tth_callback_client_leave_room(pss, vhd, new_in, new_len);
+                        tth_callback_client_leave_room(vhd, pss);
+                        break;
+                    case TTH_CODE_CLIENT_START_GAME:
+                        tth_callback_client_start_game(vhd, pss);
+                        break;
+                    case TTH_CODE_CLIENT_SPEAKER_READY:
+                        tth_callback_client_speaker_ready(vhd, pss);
+                        break;
+                    case TTH_CODE_CLIENT_LISTENER_READY:
+                        tth_callback_client_listener_ready(vhd, pss);
+                        break;
+                    case TTH_CODE_CLIENT_END_WORD_EXPLANATION:
+                        tth_callback_client_end_word_explanation(vhd, pss);
+                        break;
+                    case TTH_CODE_CLIENT_WORDS_EDITED:
+                        tth_callback_client_words_edited(vhd, pss);
                         break;
                     default:
                         // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);

@@ -2,7 +2,7 @@ var socket;
 
 window.onload = function() {
     socket = io("ws://localhost:5000");
-    var signals = ["sPlayerJoined", "sPlayerLeft", "sMessage", "sYouJoined"];
+    var signals = ["sPlayerJoined", "sPlayerLeft", "sMessage", "sYouJoined", "sGameStarted", "sExplanationStarted", "sExplanationEnded"];
     for (var i = 0; i < signals.length; ++i) {
         let tmp = signals[i];
         socket.on(tmp, function(data) {
@@ -18,5 +18,14 @@ window.onload = function() {
     }
     document.querySelector("#logout").onclick = function() {
         socket.emit("cLeaveRoom", {});
+    }
+    document.querySelector("#start").onclick = function() {
+        socket.emit("cStartGame", {});
+    }
+    document.querySelector("#sready").onclick = function() {
+        socket.emit("cSpeakerReady", {});
+    }
+    document.querySelector("#lready").onclick = function() {
+        socket.emit("cListenerReady", {});
     }
 }

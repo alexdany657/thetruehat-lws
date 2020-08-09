@@ -5,9 +5,12 @@
 #include <libwebsockets.h>
 #include <string.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <time.h>
 
 #define LWS_PLUGIN_STATIC
 #include "protocol_tth.c"
+#include "tth_timeout.h"
 
 static struct lws_protocols protocols[] = {
         { "http", lws_callback_http_dummy, 0, 0 },
@@ -55,6 +58,8 @@ int main(void)
                         /* | LLL_DEBUG */;
 
         signal(SIGINT, sigint_handler);
+        tth_timer_init();
+        srandom((int)time(NULL));
 
         lws_set_log_level(logs, NULL);
 
