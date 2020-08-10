@@ -138,9 +138,9 @@ int tth_sMessage(void *vhd, void *pss, void *_amsg, void *_aseverity, void *_asi
         return 1;
     }
 
-    cJSON_AddItemToObjectCS(_data, "msg", _msg);
-    cJSON_AddItemToObjectCS(_data, "severity", _severity);
-    cJSON_AddItemToObjectCS(_data, "signal", _signal);
+    cJSON_AddItemToObject(_data, "msg", _msg);
+    cJSON_AddItemToObject(_data, "severity", _severity);
+    cJSON_AddItemToObject(_data, "signal", _signal);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -165,19 +165,19 @@ int tth_sPlayerJoined(void *vhd, void *pss, void *_ausername) {
     if (!_username) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "username", _username);
+    cJSON_AddItemToObject(_data, "username", _username);
 
     cJSON *_users = (cJSON *)tth_get_playerList(vhd);
     if (!_users) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "playerList", _users);
+    cJSON_AddItemToObject(_data, "playerList", _users);
 
     cJSON *_host = (cJSON *)tth_get_host(vhd);
     if (!_host) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "host", _host);
+    cJSON_AddItemToObject(_data, "host", _host);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -202,19 +202,19 @@ int tth_sPlayerLeft(void *vhd, void *pss, void *_ausername) {
     if (!_username) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "username", _username);
+    cJSON_AddItemToObject(_data, "username", _username);
 
     cJSON *_users = (cJSON *)tth_get_playerList(vhd);
     if (!_users) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "playerList", _users);
+    cJSON_AddItemToObject(_data, "playerList", _users);
 
     cJSON *_host = (cJSON *)tth_get_host(vhd);
     if (!_host) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "host", _host);
+    cJSON_AddItemToObject(_data, "host", _host);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -239,31 +239,31 @@ int tth_sYouJoined(void *vhd, void *pss, void *_puser) {
     if (!_users) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "playerList", _users);
+    cJSON_AddItemToObject(_data, "playerList", _users);
 
     cJSON *_host = (cJSON *)tth_get_host(vhd);
     if (!_host) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "host", _host);
+    cJSON_AddItemToObject(_data, "host", _host);
 
     cJSON *_state = (cJSON *)tth_get_state(vhd);
     if (!_state) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "state", _state);
+    cJSON_AddItemToObject(_data, "state", _state);
 
     cJSON *_settings = (cJSON *)tth_get_settings(vhd);
     if (!_settings) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "settings", _settings);
+    cJSON_AddItemToObject(_data, "settings", _settings);
 
     cJSON *_substate = (cJSON *)tth_get_substate(vhd);
     if (!_substate) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "substate", _substate);
+    cJSON_AddItemToObject(_data, "substate", _substate);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -287,19 +287,19 @@ int tth_sGameStarted(void *vhd, void *pss) {
     if (!_speaker) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "speaker", _speaker);
+    cJSON_AddItemToObject(_data, "speaker", _speaker);
 
     cJSON *_listener = (cJSON *)tth_get_listener(vhd);
     if (!_listener) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "listener", _listener);
+    cJSON_AddItemToObject(_data, "listener", _listener);
 
     cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
     if (!_words_count) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "wordsCount", _words_count);
+    cJSON_AddItemToObject(_data, "wordsCount", _words_count);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -323,7 +323,7 @@ int tth_sExplanationStarted(void *vhd, void *pss) {
     if (!_start_time) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "startTime", _start_time);
+    cJSON_AddItemToObject(_data, "startTime", _start_time);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -343,32 +343,46 @@ int tth_sNewWord(void *vhd, void *pss) {
         return 1;
     }
 
+    cJSON *_word = (cJSON *)tth_get_word(vhd);
+    if (!_word) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "word", _word);
+
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
         return 1;
     }
 
-    // TODO
-
-    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_NEW_WORD, json_msg);
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_SPEAKER, TTH_CODE_SERVER_NEW_WORD, json_msg);
     cJSON_Delete(_data);
     cJSON_free(json_msg);
 
     return 0;
 }
 
-int tth_sWordExplanationEnded(void *vhd, void *pss) {
+int tth_sWordExplanationEnded(void *vhd, void *pss, enum tth_cause_code cause) {
     cJSON *_data = cJSON_CreateObject();
     if (!_data) {
         return 1;
     }
 
+    cJSON *_cause = (cJSON *)tth_get_cause(cause);
+    if (!_cause) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "cause", _cause);
+
+    cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
+    if (!_words_count) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "wordsCount", _words_count);
+
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
         return 1;
     }
-
-    // TODO
 
     __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_WORD_EXPLANATION_ENDED, json_msg);
     cJSON_Delete(_data);
@@ -387,7 +401,7 @@ int tth_sExplanationEnded(void *vhd, void *pss) {
     if (!_words_count) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "wordsCount", _words_count);
+    cJSON_AddItemToObject(_data, "wordsCount", _words_count);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -406,15 +420,19 @@ int tth_sWordsToEdit(void *vhd, void *pss) {
     if (!_data) {
         return 1;
     }
+
+    cJSON *_edit_words = (cJSON *)tth_get_edit_words(vhd);
+    if (!_edit_words) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "editWords", _edit_words);
     
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
         return 1;
     }
     
-    // TODO
-
-    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_WORD_EXPLANATION_ENDED, json_msg);
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_SPEAKER, TTH_CODE_SERVER_WORDS_TO_EDIT, json_msg);
     cJSON_Delete(_data);
     cJSON_free(json_msg);
 

@@ -41,7 +41,7 @@ enum tth_cause_code {
     TTH_CAUSE_CODE_EXPLAINED = 1,
     TTH_CAUSE_CODE_MISTAKE = 2,
     TTH_CAUSE_CODE_NOT_EXPLAINED = 3
-}
+};
 
 enum tth_state {
     TTH_STATE_INVALID = 0,

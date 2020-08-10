@@ -1,16 +1,20 @@
 #include "tth_timeout.h"
 
-#include "tth_misc.h"
-
+#include <libwebsockets.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
 
-/* global storage */
+/* storage */
 
 static struct timer_data__tth *timer;
 
 /* internal */
+
+#define __time_cmp(___a, ___b) \
+    (___a->time->tv_sec > ___b->time->tv_sec || \
+     (___a->time->tv_sec == ___b->time->tv_sec && \
+      (___a->time->tv_usec > ___b->time->tv_usec)))
 
 void __cock_alarm(void) {
     struct itimerval *ttwait = malloc(sizeof(struct itimerval));
@@ -62,10 +66,35 @@ int tth_set_timeout(struct timeval *time, alarmhandler_t handler, void *args) {
     new->args = args;
     new->timer_list = NULL;
 
-    ___ll_insert_when(struct timer_data__tth, new, timer_list, timer, pptd,
-            ((*pptd)->timer_list->time->tv_sec > new->time->tv_sec ||
-             ((*pptd)->timer_list->time->tv_sec == new->time->tv_sec &&
-              (*pptd)->timer_list->time->tv_usec > new->time->tv_usec)));
+    if (!timer) {
+        timer = new;
+    } else {
+        if (__time_cmp(timer, new)) {
+            struct timer_data__tth *nxt = timer;
+            timer = new;
+            new->timer_list = nxt;
+        } else {
+            lws_start_foreach_llp(struct timer_data__tth **, pptd, timer) {
+                if (!((*pptd)->timer_list)) {
+                    (*pptd)->timer_list = new;
+                    break;
+                }
+                if (__time_cmp((*pptd)->timer_list, new)) {
+                    struct timer_data__tth *nxt = (*pptd)->timer_list;
+                    (*pptd)->timer_list = new;
+                    new->timer_list = nxt;
+                    break;
+                }
+            } lws_end_foreach_llp(pptd, timer_list);
+        }
+    }
+
+    /*
+    lws_start_foreach_llp(struct timer_data__tth **, pptd, timer) {
+        lwsl_warn("Timer: %li s %li mcs\n", (*pptd)->time->tv_sec, (*pptd)->time->tv_usec);
+    } lws_end_foreach_llp(pptd, timer_list);
+    lwsl_warn("\n");
+    */
 
     if (timer == new) {
         __cock_alarm();

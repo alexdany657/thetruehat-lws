@@ -2,7 +2,8 @@ var socket;
 
 window.onload = function() {
     socket = io("ws://localhost:5000");
-    var signals = ["sPlayerJoined", "sPlayerLeft", "sMessage", "sYouJoined", "sGameStarted", "sExplanationStarted", "sExplanationEnded"];
+    var signals = ["sPlayerJoined", "sPlayerLeft", "sMessage", "sYouJoined", "sGameStarted", "sExplanationStarted",
+    "sWordExplanationEnded", "sNewWord", "sExplanationEnded", "sWordsToEdit", "sNextTurn", "sGameEnded"];
     for (var i = 0; i < signals.length; ++i) {
         let tmp = signals[i];
         socket.on(tmp, function(data) {
@@ -27,5 +28,11 @@ window.onload = function() {
     }
     document.querySelector("#lready").onclick = function() {
         socket.emit("cListenerReady", {});
+    }
+    document.querySelector("#endexpl").onclick = function() {
+        socket.emit("cEndWordExplanation", {"cause": document.querySelector("#endexplcause").value});
+    }
+    document.querySelector("#wordsedited").onclick = function() {
+        socket.emit("cWordsEdited", {});
     }
 }

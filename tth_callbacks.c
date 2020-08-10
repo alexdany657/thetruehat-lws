@@ -21,7 +21,7 @@ struct __stop_explanation_callback_args {
 struct __new_word_callback_args {
     struct per_session_data__tth *pss;
     struct per_vhost_data__tth *vhd;
-}
+};
 
 void __stop_explanation(void *_vhd, void *_pss) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
@@ -29,8 +29,24 @@ void __stop_explanation(void *_vhd, void *_pss) {
 
     vhd->info->substate = TTH_SUBSTATE_EDIT;
 
-    //TODO smth
+    if (vhd->info->word) {
+        struct edit_words_data__tth *word = malloc(sizeof(struct edit_words_data__tth));
+        if (!word) {
+            tth_sMessage(vhd, pss, "server error", "error", "cEndWordExplanation");
+            goto end;
+        }
+        word->word = vhd->info->word;
+        word->cause = TTH_CAUSE_CODE_NOT_EXPLAINED;
+        word->edit_list = NULL;
+        ___ll_bck_insert(struct edit_words_data__tth, word, edit_list, vhd->edit_words);
+        vhd->info->word = NULL;
 
+        tth_sWordExplanationEnded(vhd, pss, TTH_CAUSE_CODE_NOT_EXPLAINED);
+    }
+
+    tth_sExplanationEnded(vhd, pss);
+
+end:
     tth_sWordsToEdit(vhd, pss);
 }
 
@@ -51,7 +67,7 @@ void __stop_explanation_callback(void *_args) {
 void __new_word_callback(void *_args) {
     struct __new_word_callback_args *args = (struct __new_word_callback_args *)_args;
 
-    tth_sNewWord(agrs->vhd, agrs->pss);
+    tth_sNewWord(args->vhd, args->pss);
 }
 
 void __start_explanation(void *_vhd, void *_pss) {
@@ -59,9 +75,15 @@ void __start_explanation(void *_vhd, void *_pss) {
     struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
 
     vhd->info->substate = TTH_SUBSTATE_EXPLANATION;
+    vhd->info->word = vhd->fresh_words->word;
+    void *tmp = vhd->fresh_words;
+    vhd->fresh_words = vhd->fresh_words->word_list;
+
+    free(tmp);
+
     struct timeval *curr_time = malloc(sizeof(struct timeval));
     if (!curr_time) {
-        return NULL;
+        goto end;
     }
     vhd->info->start_time = curr_time->tv_sec * 1000 + curr_time->tv_usec / 1000;
     free(curr_time);
@@ -142,9 +164,35 @@ int __turn_prepare(void *_vhd) {
 
     vhd->info->number_of_turn++;
 
-    vhd->used_words = NULL;
+    vhd->edit_words = NULL;
 
     return 0;
+}
+
+void __end_game(void *_vhd, void *_pss) {
+    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
+    struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
+
+    // TODO scores
+
+    tth_sGameEnded(vhd, pss);
+
+    vhd->info->state = TTH_STATE_WAIT;
+    vhd->info->substate = TTH_SUBSTATE_UNDEFINED;
+
+    struct user_data__tth *puser = vhd->user_list;
+    while (puser) {
+        void *tmp = puser;
+        free(puser->username);
+        puser = puser->user_list;
+        free(tmp);
+    }
+    struct word_data__tth *pword = vhd->used_words;
+    while (pword) {
+        void *tmp = pword;
+        pword = pword->word_list;
+        free(tmp);
+    }
 }
 
 /* external */
@@ -548,7 +596,7 @@ int tth_callback_client_listener_ready(void *_vhd, void *_pss) {
 
     // checking if user is listener
     if (pos != vhd->info->listener_pos) {
-        tth_sMessage(vhd, pss, "You are not a speaker", "error", "cListenerReady");
+        tth_sMessage(vhd, pss, "You are not a listener", "error", "cListenerReady");
         return 1;
     }
 
@@ -608,19 +656,20 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
     }
 
     // processing input data
-    cJSON *_cause;
+    cJSON *__cause;
     cJSON *_data = cJSON_ParseWithLength(msg, len);
     if (!_data) {
         tth_sMessage(vhd, pss, "Server error", "error", "cEndWordExplanation");
         return 1;
     }
     
-    _cause = cJSON_GetObjectItemCaseSensitive(_data, "cause");
-    if (!cJSON_IsString(_cause)) {
+    __cause = cJSON_GetObjectItemCaseSensitive(_data, "cause");
+    if (!cJSON_IsString(__cause)) {
         tth_sMessage(vhd, pss, "Improper type of field `cause`, not a string", "error", "cEndWordExplanation");
         return 1;
     }
 
+    char *_cause = __cause->valuestring;
     enum tth_cause_code cause;
     if (!strcmp(_cause, "explained")) {
         cause = TTH_CAUSE_CODE_EXPLAINED;
@@ -636,16 +685,107 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
 
     switch (cause) {
         case TTH_CAUSE_CODE_EXPLAINED:
+            {
+            struct edit_words_data__tth *word = malloc(sizeof(struct edit_words_data__tth));
+            if (!word) {
+                tth_sMessage(vhd, pss, "server error", "error", "cEndWordExplanation");
+                return 1;
+            }
+            word->word = vhd->info->word;
+            word->cause = TTH_CAUSE_CODE_EXPLAINED;
+            word->edit_list = NULL;
+            ___ll_bck_insert(struct edit_words_data__tth, word, edit_list, vhd->edit_words);
+            vhd->info->word = NULL;
+            if (vhd->fresh_words == NULL) {
+                __stop_explanation(vhd, pss);
+                break;
+            }
+            vhd->info->word = vhd->fresh_words->word;
+            void *tmp = vhd->fresh_words;
+            vhd->fresh_words = vhd->fresh_words->word_list;
+            free(tmp);
+
+            tth_sNewWord(vhd, pss);
+            tth_sWordExplanationEnded(vhd, pss, TTH_CAUSE_CODE_EXPLAINED);
             break;
+            }
         case TTH_CAUSE_CODE_MISTAKE:
+            {
+            struct edit_words_data__tth *word = malloc(sizeof(struct edit_words_data__tth));
+            if (!word) {
+                tth_sMessage(vhd, pss, "server error", "error", "cEndWordExplanation");
+                return 1;
+            }
+            word->word = vhd->info->word;
+            word->cause = TTH_CAUSE_CODE_MISTAKE;
+            word->edit_list = NULL;
+            ___ll_bck_insert(struct edit_words_data__tth, word, edit_list, vhd->edit_words);
+            vhd->info->word = NULL;
+
+            tth_sWordExplanationEnded(vhd, pss, TTH_CAUSE_CODE_MISTAKE);
+            __stop_explanation(vhd, pss);
             break;
+            }
         case TTH_CAUSE_CODE_NOT_EXPLAINED:
+            tth_sWordExplanationEnded(vhd, pss, TTH_CAUSE_CODE_NOT_EXPLAINED);
+            __stop_explanation(vhd, pss);
             break;
+        case TTH_CAUSE_CODE_INVALID:
+            return 1;
     }
 
     return 0;
 }
 
-int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, int len) {
+int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len) {
+    struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
+    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
+
+    lwsl_user("tth_callback_client_words_edited\n");
+
+    // finding user with this pss and counting their pos
+    struct user_data__tth *puser = NULL;
+    int pos = 0;
+    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
+        if ((*ppud)->client_id == pss->client_id) {
+            puser = *ppud;
+            break;
+        }
+        pos++;
+    } lws_end_foreach_llp(ppud, user_list);
+ 
+    // if no user
+    if (!puser) {
+        tth_sMessage(vhd, pss, "You are not in room", "error", "cWordsEdited");
+        return 1;
+    }
+
+    // checking if state is play and substate is edit
+    if (vhd->info->state != TTH_STATE_PLAY) {
+        tth_sMessage(vhd, pss, "Game state isn't 'play'", "error", "cWordsEdited");
+        return 1;
+    }
+    if (vhd->info->substate != TTH_SUBSTATE_EDIT) {
+        tth_sMessage(vhd, pss, "Game substate isn't 'edit'", "error", "cWordsEdited");
+        return 1;
+    }
+
+    // checking if user is speaker
+    if (pos != vhd->info->speaker_pos) {
+        tth_sMessage(vhd, pss, "Only speaker can send this signal", "error", "cWordsEdited");
+        return 1;
+    }
+    
+    vhd->info->substate = TTH_SUBSTATE_WAIT;
+
+    if (!vhd->fresh_words) {
+        __end_game(vhd, pss);
+        return 0;
+    }
+
+    __turn_prepare(vhd);
+
+    tth_sNextTurn(vhd, pss);
+
     return 0;
 }

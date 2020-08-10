@@ -107,6 +107,8 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->info->settings->strict_mode = 1;
             vhd->info->dict = NULL;
             vhd->fresh_words = NULL;
+            vhd->used_words = NULL;
+            vhd->edit_words = NULL;
             __load_dict(vhd);
             break;
 
@@ -229,10 +231,10 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                         tth_callback_client_listener_ready(vhd, pss);
                         break;
                     case TTH_CODE_CLIENT_END_WORD_EXPLANATION:
-                        tth_callback_client_end_word_explanation(vhd, pss);
+                        tth_callback_client_end_word_explanation(vhd, pss, new_in, new_len);
                         break;
                     case TTH_CODE_CLIENT_WORDS_EDITED:
-                        tth_callback_client_words_edited(vhd, pss);
+                        tth_callback_client_words_edited(vhd, pss, new_in, new_len);
                         break;
                     default:
                         // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);

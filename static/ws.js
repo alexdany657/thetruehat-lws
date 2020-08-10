@@ -7,12 +7,19 @@ __SIGNAL_CODES = {
     "sYouJoined": 3,
     "sGameStarted": 4,
     "sExplanationStarted": 5,
-    "sExplanationEnded": 6,
+    "sNewWord": 6,
+    "sWordExplanationEnded": 7,
+    "sExplanationEnded": 8,
+    "sWordsToEdit": 9,
+    "sNextTurn": 10,
+    "sGameEnded": 11,
     "cJoinRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 0,
     "cLeaveRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 1,
     "cStartGame": __SIGNAL_CODES_CLIENT_INCREMENT + 2,
     "cSpeakerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 3,
-    "cListenerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 4
+    "cListenerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 4,
+    "cEndWordExplanation": __SIGNAL_CODES_CLIENT_INCREMENT + 5,
+    "cWordsEdited": __SIGNAL_CODES_CLIENT_INCREMENT + 6
 }
 
 function __str(a) {

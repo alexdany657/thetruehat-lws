@@ -6,6 +6,12 @@
 #include <string.h>
 #include <stdint.h>
 
+struct edit_words_data__tth {
+    struct edit_words_data__tth *edit_list;
+    char *word;
+    enum tth_cause_code cause;
+};
+
 struct word_data__tth {
     struct word_data__tth *word_list;
     char *word;
@@ -47,6 +53,7 @@ struct info__tth {
     int8_t listener_ready:1;
     int number_of_turn;
     int64_t start_time;
+    char *word;
 };
 
 /* one of these created for each destination client */
@@ -108,6 +115,8 @@ struct per_vhost_data__tth {
     struct word_data__tth *fresh_words;
 
     struct word_data__tth *used_words;
+
+    struct edit_words_data__tth *edit_words;
 };
 
 #endif

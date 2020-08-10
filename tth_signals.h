@@ -2,7 +2,6 @@
 #define TTH_SIGNALS_H
 
 #include "tth_structs.h"
-
 #include "tth_codes.h"
 
 int tth_sMessage(void *vhd, void *pss, void *_amsg, void *_aseverity, void *_asignal);
@@ -19,7 +18,7 @@ int tth_sExplanationStarted(void *vhd, void *pss);
 
 int tth_sNewWord(void *vhd, void *pss);
 
-int tth_sWordExplanationEnded(void *vhd, void *pss, void *_aword);
+int tth_sWordExplanationEnded(void *vhd, void *pss, enum tth_cause_code cause);
 
 int tth_sExplanationEnded(void *vhd, void *pss);
 
