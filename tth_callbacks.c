@@ -70,6 +70,10 @@ void __new_word_callback(void *_args) {
     tth_sNewWord(args->vhd, args->pss);
 }
 
+void __stop_callback(void *args) {
+    exit(0);
+}
+
 void __start_explanation(void *_vhd, void *_pss) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
     struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
@@ -164,7 +168,7 @@ int __turn_prepare(void *_vhd) {
 
     vhd->info->number_of_turn++;
 
-    vhd->edit_words = NULL;
+    vhd->edit_words = NULL; // TODO proper free
 
     return 0;
 }
@@ -176,6 +180,15 @@ void __end_game(void *_vhd, void *_pss) {
     // TODO scores
 
     tth_sGameEnded(vhd, pss);
+
+    struct timeval *time = malloc(sizeof(struct timeval));
+    if (!time) {
+        exit(0);
+    }
+    int wtime = vhd->info->transport_delay;
+    time->tv_sec = wtime / 1000;
+    time->tv_usec = wtime % 1000 * 1000000;
+    tth_set_timeout(time, &__stop_callback, NULL);
 
     vhd->info->state = TTH_STATE_WAIT;
     vhd->info->substate = TTH_SUBSTATE_UNDEFINED;
@@ -775,6 +788,8 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
         tth_sMessage(vhd, pss, "Only speaker can send this signal", "error", "cWordsEdited");
         return 1;
     }
+
+    // TODO gen vhd->words and vhd->used_words
     
     vhd->info->substate = TTH_SUBSTATE_WAIT;
 

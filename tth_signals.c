@@ -445,12 +445,24 @@ int tth_sNextTurn(void *vhd, void *pss) {
         return 1;
     }
 
+    cJSON *_speaker = (cJSON *)tth_get_speaker(vhd);
+    if (!_speaker) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "speaker", _speaker);
+
+    cJSON *_listener = (cJSON *)tth_get_listener(vhd);
+    if (!_listener) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "listener", _listener);
+
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
         return 1;
     }
 
-    // TODO
+    // TODO speaker listener words
 
     __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_NEXT_TURN, json_msg);
     cJSON_Delete(_data);
@@ -470,7 +482,7 @@ int tth_sGameEnded(void *vhd, void *pss) {
         return 1;
     }
 
-    // TODO
+    // TODO results
 
     __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_GAME_ENDED, json_msg);
     cJSON_Delete(_data);

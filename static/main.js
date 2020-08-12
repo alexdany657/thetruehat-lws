@@ -11,6 +11,10 @@ window.onload = function() {
             document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
         });
     }
+    socket.onclose = function() {
+        document.getElementById("r").value = document.getElementById("r").value + "close\n\n";
+        document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
+    }
     document.querySelector("#submit").onclick = function() {
         socket.emit(document.querySelector("#signal").value, JSON.parse(document.querySelector("#data").value));
     }

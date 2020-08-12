@@ -299,6 +299,9 @@ void *tth_get_edit_words(void *_vhd) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
 
     cJSON *_edit_words = cJSON_CreateArray();
+    if (!_edit_words) {
+        return NULL;
+    }
     lws_start_foreach_llp(struct edit_words_data__tth **, pped, vhd->edit_words) {
         cJSON *_edit = cJSON_CreateObject();
         if (!_edit) {
@@ -322,4 +325,36 @@ void *tth_get_edit_words(void *_vhd) {
     } lws_end_foreach_llp(pped, edit_list);
 
     return _edit_words;
+}
+
+void *tth_get_words(void *_vhd) {
+    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
+
+    cJSON *_words = cJSON_CreateArray();
+    if (!_words) {
+        return NULL;
+    }
+    lws_start_foreach_llp(struct edit_words_data__tth **, pped, vhd->words) {
+        cJSON *_wordc = cJSON_CreateObject();
+        if (!_wordc) {
+            return NULL;
+        }
+
+        cJSON *_word = cJSON_CreateString((*pped)->word);
+        if (!_word) {
+            return NULL;
+        }
+        cJSON_AddItemToObject(_wordc, "word", _word);
+
+        cJSON *_cause = (cJSON *)tth_get_cause((*pped)->cause);
+        if (!_cause) {
+            return NULL;
+        }
+        cJSON_AddItemToObject(_wordc, "cause", _cause);
+
+        cJSON_AddItemToArray(_words, _wordc);
+
+    } lws_end_foreach_llp(pped, edit_list);
+
+    return _words;
 }

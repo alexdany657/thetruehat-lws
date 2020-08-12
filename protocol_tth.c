@@ -109,6 +109,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->fresh_words = NULL;
             vhd->used_words = NULL;
             vhd->edit_words = NULL;
+            vhd->words = NULL;
             __load_dict(vhd);
             break;
 

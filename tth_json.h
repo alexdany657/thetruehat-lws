@@ -28,4 +28,6 @@ void *tth_get_cause(enum tth_cause_code cause);
 
 void *tth_get_edit_words(void *_vhd);
 
+void *tth_get_words(void *_vhd);
+
 #endif

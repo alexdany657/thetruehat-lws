@@ -96,5 +96,11 @@ function io(url) {
         }
         retObj.__ws.send(__str(__SIGNAL_CODES[signal]) + JSON.stringify(data));
     }
+    retObj.onclose = function(callback) {
+        retObj.__ws.onclose = callback;
+    }
+    retObj.onerror = function(callback) {
+        retObj.__ws.onerror = callback;
+    }
     return retObj;
 }
