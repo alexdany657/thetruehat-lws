@@ -462,7 +462,7 @@ int tth_sNextTurn(void *vhd, void *pss) {
         return 1;
     }
 
-    // TODO speaker listener words
+    // TODO words
 
     __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_NEXT_TURN, json_msg);
     cJSON_Delete(_data);

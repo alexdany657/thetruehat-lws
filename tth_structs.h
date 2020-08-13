@@ -114,8 +114,6 @@ struct per_vhost_data__tth {
 
     struct word_data__tth *fresh_words;
 
-    struct word_data__tth *used_words;
-
     struct edit_words_data__tth *edit_words;
 
     struct edit_words_data__tth *words;

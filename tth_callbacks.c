@@ -168,7 +168,14 @@ int __turn_prepare(void *_vhd) {
 
     vhd->info->number_of_turn++;
 
-    vhd->edit_words = NULL; // TODO proper free
+    vhd->edit_words = NULL;
+    struct edit_words_data__tth *pword = vhd->words;
+    while (pword) {
+        void *tmp = pword;
+        pword = pword->edit_list;
+        free(tmp);
+    }
+    vhd->words = NULL;
 
     return 0;
 }
@@ -198,12 +205,6 @@ void __end_game(void *_vhd, void *_pss) {
         void *tmp = puser;
         free(puser->username);
         puser = puser->user_list;
-        free(tmp);
-    }
-    struct word_data__tth *pword = vhd->used_words;
-    while (pword) {
-        void *tmp = pword;
-        pword = pword->word_list;
         free(tmp);
     }
 }
@@ -789,7 +790,30 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
         return 1;
     }
 
-    // TODO gen vhd->words and vhd->used_words
+    // TODO parse input and gen vhd->words
+    cJSON *_data = NULL;
+    cJSON *_words = NULL;
+    cJSON_ParseWithLength(msg, len);
+    if (!_data) {
+        tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+        return 1;
+    }
+    _words = cJSON_GetObjectItemCaseSensitive(_data, "editWords");
+    if (!_words) {
+        tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+        return 1;
+    }
+    if (!cJSON_IsArray(_words)) {
+        tth_sMessage(vhd, pss, "Incorrect type of field 'editWords'", "error", "cWordsEdited");
+        return 1;
+    }
+    cJSON *_word = NULL;
+    cJSON_ArrayForEach(_word, _words) {
+        if (!cJSON_IsObject(_word)) {
+            tth_sMessage(vhd, pss, "Incorrect value of field 'editWords'", "error", "cWordsEdited");
+            return 1;
+        }
+    }
     
     vhd->info->substate = TTH_SUBSTATE_WAIT;
 
