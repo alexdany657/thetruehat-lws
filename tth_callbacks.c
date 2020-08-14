@@ -82,6 +82,13 @@ void __start_explanation(void *_vhd, void *_pss) {
     vhd->info->word = vhd->fresh_words->word;
     void *tmp = vhd->fresh_words;
     vhd->fresh_words = vhd->fresh_words->word_list;
+    struct edit_words_data__tth *pword = vhd->edit_words;
+    while (pword) {
+        void *tmp = pword;
+        pword = pword->edit_list;
+        free(tmp);
+    }
+    vhd->edit_words = NULL;
 
     free(tmp);
 
@@ -141,6 +148,20 @@ int __randrange(int a, int b) {
     return rnd;
 }
 
+enum tth_cause_code __get_cause(char *_cause) {
+    enum tth_cause_code cause;
+    if (!strcmp(_cause, "explained")) {
+        cause = TTH_CAUSE_CODE_EXPLAINED;
+    } else if (!strcmp(_cause, "mistake")) {
+        cause = TTH_CAUSE_CODE_MISTAKE;
+    } else if (!strcmp(_cause, "notExplained")) {
+        cause = TTH_CAUSE_CODE_NOT_EXPLAINED;
+    } else {
+        cause = TTH_CAUSE_CODE_INVALID;
+    }
+    return cause;
+}
+
 int __turn_prepare(void *_vhd) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
 
@@ -167,15 +188,6 @@ int __turn_prepare(void *_vhd) {
     vhd->info->listener_ready = 0;
 
     vhd->info->number_of_turn++;
-
-    vhd->edit_words = NULL;
-    struct edit_words_data__tth *pword = vhd->words;
-    while (pword) {
-        void *tmp = pword;
-        pword = pword->edit_list;
-        free(tmp);
-    }
-    vhd->words = NULL;
 
     return 0;
 }
@@ -684,18 +696,7 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
     }
 
     char *_cause = __cause->valuestring;
-    enum tth_cause_code cause;
-    if (!strcmp(_cause, "explained")) {
-        cause = TTH_CAUSE_CODE_EXPLAINED;
-    } else if (!strcmp(_cause, "mistake")) {
-        cause = TTH_CAUSE_CODE_MISTAKE;
-    } else if (!strcmp(_cause, "notExplained")) {
-        cause = TTH_CAUSE_CODE_NOT_EXPLAINED;
-    } else {
-        cause = TTH_CAUSE_CODE_INVALID;
-        tth_sMessage(vhd, pss, "Improper value of field `cause`", "error", "cEndWordExplanation");
-        return 1;
-    }
+    enum tth_cause_code cause = __get_cause(_cause);
 
     switch (cause) {
         case TTH_CAUSE_CODE_EXPLAINED:
@@ -745,6 +746,7 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
             __stop_explanation(vhd, pss);
             break;
         case TTH_CAUSE_CODE_INVALID:
+            tth_sMessage(vhd, pss, "Improper value of field `cause`", "error", "cEndWordExplanation");
             return 1;
     }
 
@@ -790,10 +792,19 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
         return 1;
     }
 
-    // TODO parse input and gen vhd->words
-    cJSON *_data = NULL;
+    // cleanup
+    struct edit_words_data__tth *pword = vhd->words;
+    while (pword) {
+        void *tmp = pword;
+        pword = pword->edit_list;
+        free(tmp);
+    }
+    vhd->words = NULL;
+
+
+    // process input and gen vhd->words
     cJSON *_words = NULL;
-    cJSON_ParseWithLength(msg, len);
+    cJSON *_data = cJSON_ParseWithLength(msg, len);
     if (!_data) {
         tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
         return 1;
@@ -807,12 +818,63 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
         tth_sMessage(vhd, pss, "Incorrect type of field 'editWords'", "error", "cWordsEdited");
         return 1;
     }
+
     cJSON *_word = NULL;
+    struct edit_words_data__tth *curr_word = vhd->edit_words;
+    int cnt = 0;
     cJSON_ArrayForEach(_word, _words) {
         if (!cJSON_IsObject(_word)) {
             tth_sMessage(vhd, pss, "Incorrect value of field 'editWords'", "error", "cWordsEdited");
             return 1;
         }
+        cJSON *_aword = cJSON_GetObjectItemCaseSensitive(_word, "word");
+        if (!cJSON_IsString(_aword)) {
+            tth_sMessage(vhd, pss, "Incorrect value of field 'word'", "error", "cWordsEdited");
+            return 1;
+        }
+        if (strcmp(curr_word->word, _aword->valuestring)) {
+            int needed = snprintf(NULL, 0, "Incorrect word on position %i", cnt);
+            char *error_msg = malloc(needed);
+            if (!error_msg) {
+                tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+                lwsl_user("OOM: dropping\n");
+                return 1;
+            }
+            sprintf(error_msg, "Incorrect word on position %i", cnt);
+            tth_sMessage(vhd, pss, error_msg, "error", "cWordsEdited");
+            free(error_msg);
+            return 1;
+        }
+        cJSON *_cause = cJSON_GetObjectItemCaseSensitive(_word, "wordState");
+        if (!cJSON_IsString(_cause)) {
+            tth_sMessage(vhd, pss, "Incorrect type of field 'wordState'", "error", "cWordsEdited");
+            return 1;
+        }
+        enum tth_cause_code cause = __get_cause(_cause->valuestring);
+        switch (cause) {
+            case TTH_CAUSE_CODE_EXPLAINED:
+                // up scores
+            case TTH_CAUSE_CODE_MISTAKE:
+                {
+                struct edit_words_data__tth *__word = malloc(sizeof(struct edit_words_data__tth));
+                if (!__word) {
+                    tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+                    lwsl_user("OOM: dropping\n");
+                    return 1;
+                }
+                __word->word = curr_word->word;
+                __word->cause = cause;
+                __word->edit_list = NULL;
+                ___ll_bck_insert(struct edit_words_data__tth, __word, edit_list, vhd->words);
+                }
+            case TTH_CAUSE_CODE_NOT_EXPLAINED:
+                curr_word->cause = cause;
+                break;
+            case TTH_CAUSE_CODE_INVALID:
+                tth_sMessage(vhd, pss, "Incorrect value of field 'wordState'", "error", "cWordsEdited");
+                return 1;
+        }
+        curr_word = curr_word->edit_list;
     }
     
     vhd->info->substate = TTH_SUBSTATE_WAIT;

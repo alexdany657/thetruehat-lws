@@ -1,4 +1,6 @@
-var socket;
+var socket = null;
+
+var editWords = {};
 
 window.onload = function() {
     socket = io("ws://localhost:5000");
@@ -11,10 +13,17 @@ window.onload = function() {
             document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
         });
     }
-    socket.onclose = function() {
+    socket.on("sWordsToEdit", function(data) {
+        editWords = data["editWords"];
+    });
+    socket.onopen(function() {
+        document.getElementById("r").value = document.getElementById("r").value + "ready\n\n";
+        document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
+    });
+    socket.onclose(function() {
         document.getElementById("r").value = document.getElementById("r").value + "close\n\n";
         document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
-    }
+    });
     document.querySelector("#submit").onclick = function() {
         socket.emit(document.querySelector("#signal").value, JSON.parse(document.querySelector("#data").value));
     }
@@ -37,6 +46,6 @@ window.onload = function() {
         socket.emit("cEndWordExplanation", {"cause": document.querySelector("#endexplcause").value});
     }
     document.querySelector("#wordsedited").onclick = function() {
-        socket.emit("cWordsEdited", {});
+        socket.emit("cWordsEdited", {"editWords": editWords});
     }
 }

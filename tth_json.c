@@ -318,7 +318,7 @@ void *tth_get_edit_words(void *_vhd) {
         if (!_cause) {
             return NULL;
         }
-        cJSON_AddItemToObject(_edit, "cause", _cause);
+        cJSON_AddItemToObject(_edit, "wordState", _cause);
 
         cJSON_AddItemToArray(_edit_words, _edit);
 
@@ -350,7 +350,7 @@ void *tth_get_words(void *_vhd) {
         if (!_cause) {
             return NULL;
         }
-        cJSON_AddItemToObject(_wordc, "cause", _cause);
+        cJSON_AddItemToObject(_wordc, "wordState", _cause);
 
         cJSON_AddItemToArray(_words, _wordc);
 

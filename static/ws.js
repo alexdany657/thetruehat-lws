@@ -92,7 +92,7 @@ function io(url) {
         }
         if (__SIGNAL_CODES[signal] < __SIGNAL_CODES_CLIENT_INCREMENT) {
             console.warn("ws: io: emit: trying to emit server signal, ignoring.");
-            //return;
+            return;
         }
         retObj.__ws.send(__str(__SIGNAL_CODES[signal]) + JSON.stringify(data));
     }
@@ -101,6 +101,9 @@ function io(url) {
     }
     retObj.onerror = function(callback) {
         retObj.__ws.onerror = callback;
+    }
+    retObj.onopen = function(callback) {
+        retObj.__ws.onopen = callback;
     }
     return retObj;
 }

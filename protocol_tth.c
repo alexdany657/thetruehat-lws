@@ -12,6 +12,7 @@
 #include <stdio.h>
 
 #include "tth_structs.h"
+#include "tth_misc.h"
 
 #include "tth_callbacks.h"
 #include "tth_signals.h"
@@ -85,6 +86,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->vhost = lws_get_vhost(wsi);
             vhd->clientCnt = 1;
             vhd->msg_list = NULL;
+            vhd->in_list = NULL;
             vhd->info = malloc(sizeof(struct info__tth));
             if (!vhd->info) {
                 lwsl_user("OOM: dropping");
@@ -197,51 +199,101 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
 
         case LWS_CALLBACK_RECEIVE:
             {
-                enum tth_code code;
-
-                code = tth_get_code(in, len);
-
-                if (code < 0) {
-                    tth_callback_error(vhd, pss, in, len);
-                    // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
-                    return 0;
-                } else if (code < TTH_CODE_ENUM_CLIENT_ADD) {
-                    tth_callback_server(vhd, pss, code, in, len);
-                    // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
-                    return 0;
+                //lwsl_warn("%i %i\n", lws_is_first_fragment(wsi), lws_is_final_fragment(wsi));
+                int first, final;
+                first = lws_is_first_fragment(wsi);
+                final = lws_is_final_fragment(wsi);
+                /* lwsl_warn("msg: %*.*s, len: %i, is_first: %i, is_final %i\n", (int)len, (int)len, (char *)in, (int)len, first, final); */
+                
+                if (!(first && final)) {
+                    struct in_msg *curr_msg = malloc(sizeof(struct in_msg));
+                    if (!curr_msg) {
+                        lwsl_user("OOM: dropping\n");
+                        return 1;
+                    }
+                    curr_msg->in_list = NULL;
+                    curr_msg->payload = malloc(len);
+                    if (!curr_msg->payload) {
+                        lwsl_user("OOM: dropping\n");
+                        return 1;
+                    }
+                    memcpy(curr_msg->payload, in, len);
+                    curr_msg->len = len;
+                    ___ll_bck_insert(struct in_msg, curr_msg, in_list, vhd->in_list);
                 }
+                if (final) {
+                    if (!first) {
+                        int summ_len = 0;
+                        lws_start_foreach_llp(struct in_msg **, ppim, vhd->in_list) {
+                            summ_len += (*ppim)->len;
+                        } lws_end_foreach_llp(ppim, in_list);
+                        char *all_payload = malloc(summ_len);
+                        if (!all_payload) {
+                            lwsl_user("OOM: dropping\n");
+                            return 1;
+                        }
+                        summ_len = 0;
+                        lws_start_foreach_llp(struct in_msg **, ppim, vhd->in_list) {
+                            memcpy(all_payload + summ_len, (*ppim)->payload, (*ppim)->len);
+                            summ_len += (*ppim)->len;
+                        } lws_end_foreach_llp(ppim, in_list);
+                        in = all_payload;
+                        len = summ_len;
+                        struct in_msg *tmp = vhd->in_list;
+                        while (tmp) {
+                            free(tmp->payload);
+                            void *_tmp = tmp;
+                            tmp = tmp->in_list;
+                            free(_tmp);
+                        }
+                    }
 
-                int new_len = len - 2;
-                char *new_in = in + 2;
+                    enum tth_code code;
 
-                switch (code) {
-                    case TTH_CODE_CLIENT_JOIN_ROOM:
-                        tth_callback_client_join_room(vhd, pss, new_in, new_len);
-                        break;
-                    case TTH_CODE_CLIENT_LEAVE_ROOM:
-                        tth_callback_client_leave_room(vhd, pss);
-                        break;
-                    case TTH_CODE_CLIENT_START_GAME:
-                        tth_callback_client_start_game(vhd, pss);
-                        break;
-                    case TTH_CODE_CLIENT_SPEAKER_READY:
-                        tth_callback_client_speaker_ready(vhd, pss);
-                        break;
-                    case TTH_CODE_CLIENT_LISTENER_READY:
-                        tth_callback_client_listener_ready(vhd, pss);
-                        break;
-                    case TTH_CODE_CLIENT_END_WORD_EXPLANATION:
-                        tth_callback_client_end_word_explanation(vhd, pss, new_in, new_len);
-                        break;
-                    case TTH_CODE_CLIENT_WORDS_EDITED:
-                        tth_callback_client_words_edited(vhd, pss, new_in, new_len);
-                        break;
-                    default:
+                    code = tth_get_code(in, len);
+
+                    if (code < 0) {
+                        tth_callback_error(vhd, pss, in, len);
                         // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
                         return 0;
-                }
+                    } else if (code < TTH_CODE_ENUM_CLIENT_ADD) {
+                        tth_callback_server(vhd, pss, code, in, len);
+                        // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
+                        return 0;
+                    }
 
-                break;
+                    int new_len = len - 2;
+                    char *new_in = in + 2;
+
+                    switch (code) {
+                        case TTH_CODE_CLIENT_JOIN_ROOM:
+                            tth_callback_client_join_room(vhd, pss, new_in, new_len);
+                            break;
+                        case TTH_CODE_CLIENT_LEAVE_ROOM:
+                            tth_callback_client_leave_room(vhd, pss);
+                            break;
+                        case TTH_CODE_CLIENT_START_GAME:
+                            tth_callback_client_start_game(vhd, pss);
+                            break;
+                        case TTH_CODE_CLIENT_SPEAKER_READY:
+                            tth_callback_client_speaker_ready(vhd, pss);
+                            break;
+                        case TTH_CODE_CLIENT_LISTENER_READY:
+                            tth_callback_client_listener_ready(vhd, pss);
+                            break;
+                        case TTH_CODE_CLIENT_END_WORD_EXPLANATION:
+                            tth_callback_client_end_word_explanation(vhd, pss, new_in, new_len);
+                            break;
+                        case TTH_CODE_CLIENT_WORDS_EDITED:
+                            tth_callback_client_words_edited(vhd, pss, new_in, new_len);
+                            break;
+                        default:
+                            // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
+                            return 0;
+                    }
+
+                    break;
+                }
             }
         default:
             break;
