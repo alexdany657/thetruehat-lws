@@ -1,6 +1,6 @@
 # TheTrueHat-lws
 
-This is TheTrueHat server implementation in C. Now only one room is supported, and only logging in and logging out. WIP.
+This is TheTrueHat server implementation in C. Now only one room is supported.
 
 ## Build
 1. Install [libwebsockets](https://libwebsockets.org/)
