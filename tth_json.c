@@ -358,3 +358,40 @@ void *tth_get_words(void *_vhd) {
 
     return _words;
 }
+
+void *tth_get_results(void *_vhd) {
+    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
+
+    cJSON *_results = cJSON_CreateArray();
+    if (!_results) {
+        return NULL;
+    }
+    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
+        cJSON *_user = cJSON_CreateObject();
+        if (!_user) {
+            return NULL;
+        }
+
+        cJSON *_username = cJSON_CreateString((*ppud)->username);
+        if (!_username) {
+            return NULL;
+        }
+        cJSON_AddItemToObject(_user, "username", _username);
+
+        cJSON *_score_explained = cJSON_CreateNumber((*ppud)->score_explained);
+        if (!_score_explained) {
+            return NULL;
+        }
+        cJSON_AddItemToObject(_user, "scoreExplained", _score_explained);
+
+        cJSON *_score_guessed = cJSON_CreateNumber((*ppud)->score_guessed);
+        if (!_score_guessed) {
+            return NULL;
+        }
+        cJSON_AddItemToObject(_user, "scoreGuessed", _score_guessed);
+
+        cJSON_AddItemToArray(_results, _user);
+    } lws_end_foreach_llp(ppud, user_list);
+
+    return _results;
+}

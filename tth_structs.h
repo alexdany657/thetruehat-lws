@@ -98,7 +98,8 @@ struct user_data__tth {
     int8_t online:1; /* whether user is online */
     char *username; /* username */
     int time_zone_offset; /* time zone offset of this user*/
-    /* WIP */
+    int score_explained;
+    int score_guessed;
 };
 
 /* one of these is created for each vhost our protocol is used with */

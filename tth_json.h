@@ -30,4 +30,6 @@ void *tth_get_edit_words(void *_vhd);
 
 void *tth_get_words(void *_vhd);
 
+void *tth_get_results(void *_vhd);
+
 #endif

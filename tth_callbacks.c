@@ -143,7 +143,10 @@ int __randrange(int a, int b) {
     rnd /= RAND_MAX;
     rnd += a;
     if (rnd >= b) {
-        return b - 1;
+        if (b) {
+            return b - 1;
+        }
+        return 0;
     }
     return rnd;
 }
@@ -853,7 +856,22 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
         enum tth_cause_code cause = __get_cause(_cause->valuestring);
         switch (cause) {
             case TTH_CAUSE_CODE_EXPLAINED:
-                // up scores
+                {
+                    int cnt = 0;
+                    struct user_data__tth *speaker = NULL;
+                    struct user_data__tth *listener = NULL;
+                    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
+                        if (cnt == vhd->info->speaker_pos) {
+                            speaker = *ppud;
+                        }
+                        if (cnt == vhd->info->listener_pos) {
+                            listener = *ppud;
+                        }
+                        cnt++;
+                    } lws_end_foreach_llp(ppud, user_list);
+                    speaker->score_explained++;
+                    listener->score_guessed++;
+                }
             case TTH_CAUSE_CODE_MISTAKE:
                 {
                 struct edit_words_data__tth *__word = malloc(sizeof(struct edit_words_data__tth));
@@ -866,9 +884,38 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
                 __word->cause = cause;
                 __word->edit_list = NULL;
                 ___ll_bck_insert(struct edit_words_data__tth, __word, edit_list, vhd->words);
+                break;
                 }
             case TTH_CAUSE_CODE_NOT_EXPLAINED:
                 curr_word->cause = cause;
+                int fresh_words_count = 0;
+                lws_start_foreach_llp(struct word_data__tth **, ppwd, vhd->fresh_words) {
+                    fresh_words_count++;
+                } lws_end_foreach_llp(ppwd, word_list);
+                int insert_pos = __randrange(0, fresh_words_count);
+                // lwsl_warn("pos: %i\n", insert_pos);
+                struct word_data__tth *__word = malloc(sizeof(struct word_data__tth));
+                if (!__word) {
+                    tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+                    lwsl_user("OOM: dropping\n");
+                    return 1;
+                }
+                __word->word_list = NULL;
+                __word->word = curr_word->word;
+                int cnt = 0;
+                if (cnt == insert_pos) {
+                    __word->word_list = vhd->fresh_words;
+                    vhd->fresh_words = __word;
+                } else {
+                    lws_start_foreach_llp(struct word_data__tth **, ppwd, vhd->fresh_words) {
+                        if (cnt == insert_pos) {
+                            __word->word_list = (*ppwd)->word_list;
+                            (*ppwd)->word_list = __word;
+                            break;
+                        }
+                        cnt++;
+                    } lws_end_foreach_llp(ppwd, word_list);
+                }
                 break;
             case TTH_CAUSE_CODE_INVALID:
                 tth_sMessage(vhd, pss, "Incorrect value of field 'wordState'", "error", "cWordsEdited");
