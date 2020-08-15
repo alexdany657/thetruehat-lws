@@ -89,13 +89,13 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->in_list = NULL;
             vhd->info = malloc(sizeof(struct info__tth));
             if (!vhd->info) {
-                lwsl_user("OOM: dropping");
+                lwsl_user("OOM: dropping\n");
                 return 1;
             }
             memset(vhd->info, 0, sizeof(struct info__tth));
             vhd->info->settings = malloc(sizeof(struct settings__tth));
             if (!vhd->info->settings) {
-                lwsl_user("OOM: dropping");
+                lwsl_user("OOM: dropping\n");
                 return 1;
             }
 
@@ -106,8 +106,23 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->info->settings->delay_time = 3000;
             vhd->info->settings->explanation_time = 40000;
             vhd->info->settings->aftermath_time = 3000;
-            vhd->info->settings->strict_mode = 1;
+            vhd->info->settings->strict_mode = 0;
             vhd->info->dict = NULL;
+            vhd->info->start_time = malloc(sizeof(struct timeval));
+            if (!vhd->info->start_time) {
+                lwsl_user("OOM: dropping\n");
+                return 1;
+            }
+            vhd->info->end_explanation_time = malloc(sizeof(struct timeval));
+            if (!vhd->info->end_explanation_time) {
+                lwsl_user("OOM: dropping\n");
+                return 1;
+            }
+            vhd->info->end_aftermath_time = malloc(sizeof(struct timeval));
+            if (!vhd->info->end_aftermath_time) {
+                lwsl_user("OOM: dropping\n");
+                return 1;
+            }
             vhd->fresh_words = NULL;
             vhd->edit_words = NULL;
             vhd->words = NULL;

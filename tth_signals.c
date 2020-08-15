@@ -227,8 +227,9 @@ int tth_sPlayerLeft(void *vhd, void *pss, void *_ausername) {
     return 0;
 }
 
-int tth_sYouJoined(void *vhd, void *pss, void *_puser) {
-    struct user_data__tth *puser = (struct user_data__tth *)_puser;
+int tth_sYouJoined(void *_vhd, void *_pss) {
+    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
+    struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
 
     cJSON *_data = cJSON_CreateObject();
     if (!_data) {
@@ -259,11 +260,65 @@ int tth_sYouJoined(void *vhd, void *pss, void *_puser) {
     }
     cJSON_AddItemToObject(_data, "settings", _settings);
 
-    cJSON *_substate = (cJSON *)tth_get_substate(vhd);
-    if (!_substate) {
-        return 1;
+    if (vhd->info->state == TTH_STATE_PLAY) {
+        cJSON *_substate = (cJSON *)tth_get_substate(vhd);
+        if (!_substate) {
+            return 1;
+        }
+        cJSON_AddItemToObject(_data, "substate", _substate);
+
+        cJSON *_speaker = (cJSON *)tth_get_speaker(vhd);
+        if (!_speaker) {
+            return 1;
+        }
+        cJSON_AddItemToObject(_data, "speaker", _speaker);
+
+        cJSON *_listener = (cJSON *)tth_get_listener(vhd);
+        if (!_listener) {
+            return 1;
+        }
+        cJSON_AddItemToObject(_data, "listener", _listener);
+
+        struct user_data__tth *uspeaker = NULL;
+        int pos = 0;
+        lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
+            if (pos == vhd->info->speaker_pos) {
+                uspeaker = *ppud;
+                break;
+            }
+            pos++;
+        } lws_end_foreach_llp(ppud, user_list);
+        switch (vhd->info->substate) {
+            case TTH_SUBSTATE_EXPLANATION:
+                {
+                    cJSON *_start_time = (cJSON *)tth_get_start_time(vhd);
+                    if (!_start_time) {
+                        return 1;
+                    }
+                    cJSON_AddItemToObject(_data, "startTime", _start_time);
+
+                    if (uspeaker->client_id == pss->client_id) {
+                        cJSON *_word = (cJSON *)tth_get_word(vhd);
+                        if (!_word) {
+                            return 1;
+                        }
+                        cJSON_AddItemToObject(_data, "word", _word);
+                    }
+                    break;
+                }
+            case TTH_SUBSTATE_EDIT:
+                if (uspeaker->client_id == pss->client_id) {
+                    cJSON *_edit_words = (cJSON *)tth_get_edit_words(vhd);
+                    if (!_edit_words) {
+                        return 1;
+                    }
+                    cJSON_AddItemToObject(_data, "editWords", _edit_words);
+                }
+                break;
+            default:
+                break;
+        }
     }
-    cJSON_AddItemToObject(_data, "substate", _substate);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {

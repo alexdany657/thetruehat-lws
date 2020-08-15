@@ -16,4 +16,9 @@
     } \
 }
 
+#define __time_cmp(___a, ___b) \
+    (___a->tv_sec > ___b->tv_sec || \
+     (___a->tv_sec == ___b->tv_sec && \
+      (___a->tv_usec > ___b->tv_usec)))
+
 #endif

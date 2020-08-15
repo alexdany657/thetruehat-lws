@@ -244,7 +244,7 @@ void *tth_get_words_count(void *_vhd) {
 void *tth_get_start_time(void *_vhd) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
     
-    cJSON *_start_time = cJSON_CreateNumber(vhd->info->start_time);
+    cJSON *_start_time = cJSON_CreateNumber(vhd->info->start_time->tv_sec * 1000 + vhd->info->start_time->tv_usec / 1000);
     if (!_start_time) {
         return NULL;
     }

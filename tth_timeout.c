@@ -1,4 +1,5 @@
 #include "tth_timeout.h"
+#include "tth_misc.h"
 
 #include <libwebsockets.h>
 #include <stdlib.h>
@@ -10,11 +11,6 @@
 static struct timer_data__tth *timer;
 
 /* internal */
-
-#define __time_cmp(___a, ___b) \
-    (___a->time->tv_sec > ___b->time->tv_sec || \
-     (___a->time->tv_sec == ___b->time->tv_sec && \
-      (___a->time->tv_usec > ___b->time->tv_usec)))
 
 void __cock_alarm(void) {
     struct itimerval *ttwait = malloc(sizeof(struct itimerval));
@@ -69,7 +65,7 @@ int tth_set_timeout(struct timeval *time, alarmhandler_t handler, void *args) {
     if (!timer) {
         timer = new;
     } else {
-        if (__time_cmp(timer, new)) {
+        if (__time_cmp(timer->time, new->time)) {
             struct timer_data__tth *nxt = timer;
             timer = new;
             new->timer_list = nxt;
@@ -79,7 +75,7 @@ int tth_set_timeout(struct timeval *time, alarmhandler_t handler, void *args) {
                     (*pptd)->timer_list = new;
                     break;
                 }
-                if (__time_cmp((*pptd)->timer_list, new)) {
+                if (__time_cmp((*pptd)->timer_list->time, new->time)) {
                     struct timer_data__tth *nxt = (*pptd)->timer_list;
                     (*pptd)->timer_list = new;
                     new->timer_list = nxt;

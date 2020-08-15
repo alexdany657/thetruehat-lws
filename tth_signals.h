@@ -10,7 +10,7 @@ int tth_sPlayerJoined(void *vhd, void *pss, void *_ausername);
 
 int tth_sPlayerLeft(void *vhd, void *pss, void *_ausername);
 
-int tth_sYouJoined(void *vhd, void *pss, void *_puser);
+int tth_sYouJoined(void *_vhd, void *_pss);
 
 int tth_sGameStarted(void *vhd, void *pss);
 

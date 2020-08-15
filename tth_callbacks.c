@@ -23,6 +23,16 @@ struct __new_word_callback_args {
     struct per_vhost_data__tth *vhd;
 };
 
+int __incr_timeval(struct timeval *time, int64_t incr) {
+    time->tv_sec += incr / 1000;
+    time->tv_usec += incr % 1000 * 1000;
+    if (time->tv_usec >= 1000000) {
+        time->tv_usec -= 1000000;
+        time->tv_usec++;
+    }
+    return 0;
+}
+
 void __stop_explanation(void *_vhd, void *_pss) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
     struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
@@ -92,13 +102,12 @@ void __start_explanation(void *_vhd, void *_pss) {
 
     free(tmp);
 
-    struct timeval *curr_time = malloc(sizeof(struct timeval));
-    if (!curr_time) {
-        goto end;
-    }
-    vhd->info->start_time = curr_time->tv_sec * 1000 + curr_time->tv_usec / 1000;
-    free(curr_time);
-    vhd->info->start_time += vhd->info->transport_delay + vhd->info->settings->delay_time;
+    gettimeofday(vhd->info->start_time, NULL);
+    __incr_timeval(vhd->info->start_time, vhd->info->transport_delay + vhd->info->settings->delay_time);
+    memcpy(vhd->info->end_explanation_time, vhd->info->start_time, sizeof(struct timeval));
+    __incr_timeval(vhd->info->end_explanation_time, vhd->info->settings->explanation_time);
+    memcpy(vhd->info->end_aftermath_time, vhd->info->end_explanation_time, sizeof(struct timeval));
+    __incr_timeval(vhd->info->end_aftermath_time, vhd->info->settings->aftermath_time);
 
     if (vhd->info->settings->strict_mode) {
         struct timeval *time = malloc(sizeof(struct timeval));
@@ -107,7 +116,7 @@ void __start_explanation(void *_vhd, void *_pss) {
         }
         int wtime = vhd->info->transport_delay + vhd->info->settings->delay_time + vhd->info->settings->explanation_time + vhd->info->settings->aftermath_time;
         time->tv_sec = wtime / 1000;
-        time->tv_usec = wtime % 1000 * 1000000;
+        time->tv_usec = wtime % 1000 * 1000;
         struct __stop_explanation_callback_args *args = malloc(sizeof(struct __stop_explanation_callback_args));
         if (!args) {
             goto end;
@@ -124,7 +133,7 @@ void __start_explanation(void *_vhd, void *_pss) {
     }
     int wtime = vhd->info->transport_delay;
     time->tv_sec = wtime / 1000;
-    time->tv_usec = wtime % 1000 * 1000000;
+    time->tv_usec = wtime % 1000 * 1000;
     struct __new_word_callback_args *args = malloc(sizeof(struct __new_word_callback_args));
     if (!args) {
         goto end;
@@ -198,8 +207,6 @@ int __turn_prepare(void *_vhd) {
 void __end_game(void *_vhd, void *_pss) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
     struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
-
-    // TODO scores
 
     tth_sGameEnded(vhd, pss);
 
@@ -373,7 +380,7 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
     puser->client_id = pss->client_id;
 
     tth_sPlayerJoined(vhd, pss, username);
-    tth_sYouJoined(vhd, pss, puser);
+    tth_sYouJoined(vhd, pss);
 
     return 0;
 }
@@ -684,6 +691,26 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
         return 1;
     }
 
+    // checking time
+    struct timeval *curr_time = malloc(sizeof(struct timeval));
+    if (!curr_time) {
+        tth_sMessage(vhd, pss, "server error", "error", "cEndWordExplanation");
+        return 1;
+    }
+    gettimeofday(curr_time, NULL);
+
+    if (__time_cmp(vhd->info->start_time, curr_time)) {
+        tth_sMessage(vhd, pss, "Too early", "error", "cEndWordExplanation");
+        return 1;
+    }
+    /*
+     * no need
+    if (__time_cmp(curr_time, vhd->info->end_aftermath_time)) {
+        tth_sMessage(vhd, pss, "Too late", "error", "cEndWordExplanation");
+        return 1;
+    }
+    */
+
     // processing input data
     cJSON *__cause;
     cJSON *_data = cJSON_ParseWithLength(msg, len);
@@ -715,6 +742,10 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
             ___ll_bck_insert(struct edit_words_data__tth, word, edit_list, vhd->edit_words);
             vhd->info->word = NULL;
             if (vhd->fresh_words == NULL) {
+                __stop_explanation(vhd, pss);
+                break;
+            }
+            if (__time_cmp(curr_time, vhd->info->end_explanation_time)) {
                 __stop_explanation(vhd, pss);
                 break;
             }
@@ -821,10 +852,64 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
         tth_sMessage(vhd, pss, "Incorrect type of field 'editWords'", "error", "cWordsEdited");
         return 1;
     }
+    int cnt = 0;
+    lws_start_foreach_llp(struct edit_words_data__tth **, pped, vhd->edit_words) {
+        cnt++;
+    } lws_end_foreach_llp(pped, edit_list);
+    
+    if (cJSON_GetArraySize(_words) != cnt) {
+        tth_sMessage(vhd, pss, "Incorrect number of words", "error", "cWordsEdited");
+        return 1;
+    }
 
+    // running transaction test
     cJSON *_word = NULL;
     struct edit_words_data__tth *curr_word = vhd->edit_words;
-    int cnt = 0;
+    cJSON_ArrayForEach(_word, _words) {
+        if (!cJSON_IsObject(_word)) {
+            tth_sMessage(vhd, pss, "Incorrect type of element field 'editWords'", "error", "cWordsEdited");
+            return 1;
+        }
+        cJSON *_aword = cJSON_GetObjectItemCaseSensitive(_word, "word");
+        if (!cJSON_IsString(_aword)) {
+            tth_sMessage(vhd, pss, "Incorrect type of field 'word'", "error", "cWordsEdited");
+            return 1;
+        }
+        if (strcmp(curr_word->word, _aword->valuestring)) {
+            int needed = snprintf(NULL, 0, "Incorrect word on position %i", cnt);
+            char *error_msg = malloc(needed);
+            if (!error_msg) {
+                tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+                lwsl_user("OOM: dropping\n");
+                return 1;
+            }
+            sprintf(error_msg, "Incorrect word on position %i", cnt);
+            tth_sMessage(vhd, pss, error_msg, "error", "cWordsEdited");
+            free(error_msg);
+            return 1;
+        }
+        cJSON *_cause = cJSON_GetObjectItemCaseSensitive(_word, "wordState");
+        if (!cJSON_IsString(_cause)) {
+            tth_sMessage(vhd, pss, "Incorrect type of field 'wordState'", "error", "cWordsEdited");
+            return 1;
+        }
+        enum tth_cause_code cause = __get_cause(_cause->valuestring);
+        switch (cause) {
+            case TTH_CAUSE_CODE_EXPLAINED:
+            case TTH_CAUSE_CODE_MISTAKE:
+            case TTH_CAUSE_CODE_NOT_EXPLAINED:
+                break;
+            case TTH_CAUSE_CODE_INVALID:
+                tth_sMessage(vhd, pss, "Incorrect value of field 'wordState'", "error", "cWordsEdited");
+                return 1;
+        }
+        curr_word = curr_word->edit_list;
+    }
+
+    // running transaction
+    _word = NULL;
+    curr_word = vhd->edit_words;
+    cnt = 0;
     cJSON_ArrayForEach(_word, _words) {
         if (!cJSON_IsObject(_word)) {
             tth_sMessage(vhd, pss, "Incorrect value of field 'editWords'", "error", "cWordsEdited");

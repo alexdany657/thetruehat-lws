@@ -5,6 +5,7 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <sys/time.h>
 
 struct edit_words_data__tth {
     struct edit_words_data__tth *edit_list;
@@ -52,7 +53,9 @@ struct info__tth {
     int8_t speaker_ready:1;
     int8_t listener_ready:1;
     int number_of_turn;
-    int64_t start_time;
+    struct timeval *start_time;
+    struct timeval *end_explanation_time;
+    struct timeval *end_aftermath_time;
     char *word;
 };
 
