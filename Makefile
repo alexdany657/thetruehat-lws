@@ -1,4 +1,4 @@
-COMMON_FLAGS=-g -Wall
+COMMON_FLAGS=-g -Wall -std=gnu18
 
 tth: tth.o tth_codes.o tth_callbacks.o tth_signals.o tth_json.o lib/libcJSON.so tth_timeout.o
 	gcc -o tth tth.o tth_codes.o tth_callbacks.o tth_signals.o tth_json.o tth_timeout.o -Llib -lwebsockets -lcJSON
