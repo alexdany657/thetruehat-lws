@@ -3,7 +3,7 @@ var socket = null;
 var editWords = {};
 
 window.onload = function() {
-    socket = io("wss://" + window.location.host + window.location.pathname);
+    socket = io("ws://" + window.location.host + window.location.pathname);
     var signals = ["sPlayerJoined", "sPlayerLeft", "sMessage", "sYouJoined", "sGameStarted", "sExplanationStarted",
     "sWordExplanationEnded", "sNewWord", "sExplanationEnded", "sWordsToEdit", "sNextTurn", "sGameEnded"];
     for (var i = 0; i < signals.length; ++i) {

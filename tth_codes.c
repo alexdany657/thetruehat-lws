@@ -40,6 +40,8 @@ enum tth_code tth_get_code(char *msg, int len) {
             return TTH_CODE_SERVER_NEXT_TURN;
         case TTH_CODE_SERVER_GAME_ENDED:
             return TTH_CODE_SERVER_GAME_ENDED;
+        case TTH_CODE_SERVER_PONG:
+            return TTH_CODE_SERVER_PONG;
 
         case TTH_CODE_CLIENT_JOIN_ROOM:
             return TTH_CODE_CLIENT_JOIN_ROOM;
@@ -55,6 +57,8 @@ enum tth_code tth_get_code(char *msg, int len) {
             return TTH_CODE_CLIENT_END_WORD_EXPLANATION;
         case TTH_CODE_CLIENT_WORDS_EDITED:
             return TTH_CODE_CLIENT_WORDS_EDITED;
+        case TTH_CODE_CLIENT_PING:
+            return TTH_CODE_CLIENT_PING;
     }
     return TTH_CODE_ERROR;
 }

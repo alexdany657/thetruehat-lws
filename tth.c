@@ -64,7 +64,7 @@ int main(void)
         lws_set_log_level(logs, NULL);
 
         memset(&info, 0, sizeof info); /* otherwise uninitialized garbage */
-        info.port = 5000;
+        info.port = 5005;
         info.mounts = &mount;
         info.protocols = protocols;
         info.vhost_name = "localhost";

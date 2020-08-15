@@ -559,3 +559,8 @@ int tth_sGameEnded(void *vhd, void *pss) {
 
     return 0;
 }
+
+int tth_sPong(void *vhd, void *pss) {
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_THIS_CLIENT, TTH_CODE_SERVER_PONG, "");
+    return 0;
+}
