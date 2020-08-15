@@ -4,8 +4,22 @@ __SIGNAL_CODES = {
     "sMessage": 0,
     "sPlayerJoined": 1,
     "sPlayerLeft": 2,
+    "sYouJoined": 3,
+    "sGameStarted": 4,
+    "sExplanationStarted": 5,
+    "sNewWord": 6,
+    "sWordExplanationEnded": 7,
+    "sExplanationEnded": 8,
+    "sWordsToEdit": 9,
+    "sNextTurn": 10,
+    "sGameEnded": 11,
     "cJoinRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 0,
-    "cLeaveRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 1
+    "cLeaveRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 1,
+    "cStartGame": __SIGNAL_CODES_CLIENT_INCREMENT + 2,
+    "cSpeakerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 3,
+    "cListenerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 4,
+    "cEndWordExplanation": __SIGNAL_CODES_CLIENT_INCREMENT + 5,
+    "cWordsEdited": __SIGNAL_CODES_CLIENT_INCREMENT + 6
 }
 
 function __str(a) {
@@ -78,9 +92,18 @@ function io(url) {
         }
         if (__SIGNAL_CODES[signal] < __SIGNAL_CODES_CLIENT_INCREMENT) {
             console.warn("ws: io: emit: trying to emit server signal, ignoring.");
-            //return;
+            return;
         }
         retObj.__ws.send(__str(__SIGNAL_CODES[signal]) + JSON.stringify(data));
+    }
+    retObj.onclose = function(callback) {
+        retObj.__ws.onclose = callback;
+    }
+    retObj.onerror = function(callback) {
+        retObj.__ws.onerror = callback;
+    }
+    retObj.onopen = function(callback) {
+        retObj.__ws.onopen = callback;
     }
     return retObj;
 }

@@ -1,19 +1,29 @@
-var socket;
+var socket = null;
+
+var editWords = {};
 
 window.onload = function() {
     socket = io("ws://localhost:5000");
-    socket.on("sPlayerJoined", function(msg) {
-        document.getElementById("r").value = document.getElementById("r").value + JSON.stringify(msg) + "\n";
+    var signals = ["sPlayerJoined", "sPlayerLeft", "sMessage", "sYouJoined", "sGameStarted", "sExplanationStarted",
+    "sWordExplanationEnded", "sNewWord", "sExplanationEnded", "sWordsToEdit", "sNextTurn", "sGameEnded"];
+    for (var i = 0; i < signals.length; ++i) {
+        let tmp = signals[i];
+        socket.on(tmp, function(data) {
+            document.getElementById("r").value = document.getElementById("r").value + tmp + "\n" + JSON.stringify(data) + "\n\n";
+            document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
+        });
+    }
+    socket.on("sWordsToEdit", function(data) {
+        editWords = data["editWords"];
+    });
+    socket.onopen(function() {
+        document.getElementById("r").value = document.getElementById("r").value + "ready\n\n";
         document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
     });
-    socket.on("sPlayerLeft", function(msg) {
-        document.getElementById("r").value = document.getElementById("r").value + JSON.stringify(msg) + "\n";
+    socket.onclose(function() {
+        document.getElementById("r").value = document.getElementById("r").value + "close\n\n";
         document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
     });
-    socket.on("sMessage", function(msg) {
-        document.getElementById("r").value = document.getElementById("r").value + msg.msg + "\n";
-        document.getElementById("r").scrollTop = document.getElementById("r").scrollHeight;
-    })
     document.querySelector("#submit").onclick = function() {
         socket.emit(document.querySelector("#signal").value, JSON.parse(document.querySelector("#data").value));
     }
@@ -22,5 +32,20 @@ window.onload = function() {
     }
     document.querySelector("#logout").onclick = function() {
         socket.emit("cLeaveRoom", {});
+    }
+    document.querySelector("#start").onclick = function() {
+        socket.emit("cStartGame", {});
+    }
+    document.querySelector("#sready").onclick = function() {
+        socket.emit("cSpeakerReady", {});
+    }
+    document.querySelector("#lready").onclick = function() {
+        socket.emit("cListenerReady", {});
+    }
+    document.querySelector("#endexpl").onclick = function() {
+        socket.emit("cEndWordExplanation", {"cause": document.querySelector("#endexplcause").value});
+    }
+    document.querySelector("#wordsedited").onclick = function() {
+        socket.emit("cWordsEdited", {"editWords": editWords});
     }
 }

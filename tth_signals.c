@@ -1,10 +1,13 @@
+#include "tth_signals.h"
+
 #include "tth_misc.h"
 
-#include "tth_signals.h"
+#include "tth_json.h"
 
 #include "cJSON/cJSON.h"
 #include <libwebsockets.h>
 #include <string.h>
+#include <time.h>
 
 /* internal functions */
 
@@ -16,7 +19,7 @@ int __tth_add_dest(struct msg *pmsg, struct per_session_data__tth *pss) {
     }
     memset(pdest, 0, sizeof(struct dest_data__tth));
     pdest->pss = pss;
-    pdest->clientId = pss->clientId;
+    pdest->client_id = pss->client_id;
     lws_ll_fwd_insert(pdest, dest_list, pmsg->dest_list);
     return 0;
 }
@@ -71,8 +74,18 @@ int __tth_send_signal(void *_vhd, void *_pss, enum tth_dest_code dest_code, enum
             break;
 
         case TTH_DEST_CODE_SPEAKER:
-            /* TODO: implement */
-            return 1;
+            {
+            int cnt = 0;
+            lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
+                if (cnt == vhd->info->speaker_pos) {
+                    __tth_add_dest(pmsg, (*ppud)->pss);
+                    ___ll_bck_insert(struct msg, pmsg, msg_list, vhd->msg_list);
+                    lws_callback_on_writable((*ppud)->pss->wsi);
+                }
+                cnt++;
+            } lws_end_foreach_llp(ppud, user_list);
+            return 0;
+            }
 
         case TTH_DEST_CODE_INVALID:
             return 1;
@@ -81,17 +94,19 @@ int __tth_send_signal(void *_vhd, void *_pss, enum tth_dest_code dest_code, enum
             break;
     }
 
+    /*
     lws_start_foreach_llp(struct msg **, ppmsg, vhd->msg_list) {
         lwsl_user("msg: payload: %s\n", (char *)((*ppmsg)->payload + LWS_PRE));
         lws_start_foreach_llp(struct dest_data__tth **, ppdd, (*ppmsg)->dest_list) {
-            lwsl_user("dest: clientId %i\n", (*ppdd)->clientId);
+            lwsl_user("dest: client_id %i\n", (*ppdd)->client_id);
         } lws_end_foreach_llp(ppdd, dest_list);
     } lws_end_foreach_llp(ppmsg, msg_list);
     lwsl_user("\n");
 
     lws_start_foreach_llp(struct per_session_data__tth **, ppss, vhd->pss_list) {
-        lwsl_user("pss: clientId: %i\n", (*ppss)->clientId);
+        lwsl_user("pss: client_id: %i\n", (*ppss)->client_id);
     } lws_end_foreach_llp(ppss, pss_list);
+    */
 
     return 0;
 }
@@ -123,9 +138,9 @@ int tth_sMessage(void *vhd, void *pss, void *_amsg, void *_aseverity, void *_asi
         return 1;
     }
 
-    cJSON_AddItemToObjectCS(_data, "msg", _msg);
-    cJSON_AddItemToObjectCS(_data, "severity", _severity);
-    cJSON_AddItemToObjectCS(_data, "signal", _signal);
+    cJSON_AddItemToObject(_data, "msg", _msg);
+    cJSON_AddItemToObject(_data, "severity", _severity);
+    cJSON_AddItemToObject(_data, "signal", _signal);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -138,9 +153,8 @@ int tth_sMessage(void *vhd, void *pss, void *_amsg, void *_aseverity, void *_asi
     return 0;
 }
 
-int tth_sPlayerJoined(void *_vhd, void *pss, void *_ausername) {
+int tth_sPlayerJoined(void *vhd, void *pss, void *_ausername) {
     char *ausername = (char *)_ausername;
-    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
 
     cJSON *_data = cJSON_CreateObject();
     if (!_data) {
@@ -151,50 +165,19 @@ int tth_sPlayerJoined(void *_vhd, void *pss, void *_ausername) {
     if (!_username) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "username", _username);
+    cJSON_AddItemToObject(_data, "username", _username);
 
-    cJSON *_users = cJSON_CreateArray();
+    cJSON *_users = (cJSON *)tth_get_playerList(vhd);
     if (!_users) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "playerList", _users);
+    cJSON_AddItemToObject(_data, "playerList", _users);
 
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        cJSON *__user = cJSON_CreateObject();
-        if (!__user) {
-            break;
-        }
-
-        cJSON *__username = cJSON_CreateString((*ppud)->username);
-        if (!__username) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "username", __username);
-
-        cJSON *__online = cJSON_CreateBool((*ppud)->online);
-        if (!__online) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "online", __online);
-
-        cJSON_AddItemToArray(_users, __user);
-    } lws_end_foreach_llp(ppud, user_list);
-
-    char *ahost = NULL;
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        if ((*ppud)->online) {
-            ahost = (*ppud)->username;
-            break;
-        }
-    } lws_end_foreach_llp(ppud, user_list);
-    if (!ahost) {
-        ahost = "";
-    }
-    cJSON *_host = cJSON_CreateString(ahost);
+    cJSON *_host = (cJSON *)tth_get_host(vhd);
     if (!_host) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "host", _host);
+    cJSON_AddItemToObject(_data, "host", _host);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
@@ -207,9 +190,8 @@ int tth_sPlayerJoined(void *_vhd, void *pss, void *_ausername) {
     return 0;
 }
 
-int tth_sPlayerLeft(void *_vhd, void *pss, void *_ausername) {
+int tth_sPlayerLeft(void *vhd, void *pss, void *_ausername) {
     char *ausername = (char *)_ausername;
-    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
 
     cJSON *_data = cJSON_CreateObject();
     if (!_data) {
@@ -220,56 +202,358 @@ int tth_sPlayerLeft(void *_vhd, void *pss, void *_ausername) {
     if (!_username) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "username", _username);
+    cJSON_AddItemToObject(_data, "username", _username);
 
-    cJSON *_users = cJSON_CreateArray();
+    cJSON *_users = (cJSON *)tth_get_playerList(vhd);
     if (!_users) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "playerList", _users);
+    cJSON_AddItemToObject(_data, "playerList", _users);
 
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        cJSON *__user = cJSON_CreateObject();
-        if (!__user) {
-            break;
-        }
-
-        cJSON *__username = cJSON_CreateString((*ppud)->username);
-        if (!__username) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "username", __username);
-
-        cJSON *__online = cJSON_CreateBool((*ppud)->online);
-        if (!__online) {
-            break;
-        }
-        cJSON_AddItemToObjectCS(__user, "online", __online);
-
-        cJSON_AddItemToArray(_users, __user);
-    } lws_end_foreach_llp(ppud, user_list);
-
-    char *ahost = NULL;
-    lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
-        if ((*ppud)->online) {
-            ahost = (*ppud)->username;
-            break;
-        }
-    } lws_end_foreach_llp(ppud, user_list);
-    if (!ahost) {
-        ahost = "";
-    }
-    cJSON *_host = cJSON_CreateString(ahost);
+    cJSON *_host = (cJSON *)tth_get_host(vhd);
     if (!_host) {
         return 1;
     }
-    cJSON_AddItemToObjectCS(_data, "host", _host);
+    cJSON_AddItemToObject(_data, "host", _host);
 
     char *json_msg = cJSON_Print(_data);
     if (!json_msg) {
         return 1;
     }
     __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_PLAYER_LEFT, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sYouJoined(void *_vhd, void *_pss) {
+    struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
+    struct per_session_data__tth *pss = (struct per_session_data__tth *)_pss;
+
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_users = (cJSON *)tth_get_playerList(vhd);
+    if (!_users) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "playerList", _users);
+
+    cJSON *_host = (cJSON *)tth_get_host(vhd);
+    if (!_host) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "host", _host);
+
+    cJSON *_state = (cJSON *)tth_get_state(vhd);
+    if (!_state) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "state", _state);
+
+    cJSON *_settings = (cJSON *)tth_get_settings(vhd);
+    if (!_settings) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "settings", _settings);
+
+    if (vhd->info->state == TTH_STATE_PLAY) {
+        cJSON *_substate = (cJSON *)tth_get_substate(vhd);
+        if (!_substate) {
+            return 1;
+        }
+        cJSON_AddItemToObject(_data, "substate", _substate);
+
+        cJSON *_speaker = (cJSON *)tth_get_speaker(vhd);
+        if (!_speaker) {
+            return 1;
+        }
+        cJSON_AddItemToObject(_data, "speaker", _speaker);
+
+        cJSON *_listener = (cJSON *)tth_get_listener(vhd);
+        if (!_listener) {
+            return 1;
+        }
+        cJSON_AddItemToObject(_data, "listener", _listener);
+
+        struct user_data__tth *uspeaker = NULL;
+        int pos = 0;
+        lws_start_foreach_llp(struct user_data__tth **, ppud, vhd->user_list) {
+            if (pos == vhd->info->speaker_pos) {
+                uspeaker = *ppud;
+                break;
+            }
+            pos++;
+        } lws_end_foreach_llp(ppud, user_list);
+        switch (vhd->info->substate) {
+            case TTH_SUBSTATE_EXPLANATION:
+                {
+                    cJSON *_start_time = (cJSON *)tth_get_start_time(vhd);
+                    if (!_start_time) {
+                        return 1;
+                    }
+                    cJSON_AddItemToObject(_data, "startTime", _start_time);
+
+                    if (uspeaker->client_id == pss->client_id) {
+                        cJSON *_word = (cJSON *)tth_get_word(vhd);
+                        if (!_word) {
+                            return 1;
+                        }
+                        cJSON_AddItemToObject(_data, "word", _word);
+                    }
+                    break;
+                }
+            case TTH_SUBSTATE_EDIT:
+                if (uspeaker->client_id == pss->client_id) {
+                    cJSON *_edit_words = (cJSON *)tth_get_edit_words(vhd);
+                    if (!_edit_words) {
+                        return 1;
+                    }
+                    cJSON_AddItemToObject(_data, "editWords", _edit_words);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_THIS_CLIENT, TTH_CODE_SERVER_YOU_JOINED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sGameStarted(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_speaker = (cJSON *)tth_get_speaker(vhd);
+    if (!_speaker) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "speaker", _speaker);
+
+    cJSON *_listener = (cJSON *)tth_get_listener(vhd);
+    if (!_listener) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "listener", _listener);
+
+    cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
+    if (!_words_count) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "wordsCount", _words_count);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_GAME_STARTED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sExplanationStarted(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_start_time = (cJSON *)tth_get_start_time(vhd);
+    if (!_start_time) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "startTime", _start_time);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_EXPLANATION_STARTED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sNewWord(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_word = (cJSON *)tth_get_word(vhd);
+    if (!_word) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "word", _word);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_SPEAKER, TTH_CODE_SERVER_NEW_WORD, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sWordExplanationEnded(void *vhd, void *pss, enum tth_cause_code cause) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_cause = (cJSON *)tth_get_cause(cause);
+    if (!_cause) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "cause", _cause);
+
+    cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
+    if (!_words_count) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "wordsCount", _words_count);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_WORD_EXPLANATION_ENDED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sExplanationEnded(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
+    if (!_words_count) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "wordsCount", _words_count);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_EXPLANATION_ENDED, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sWordsToEdit(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_edit_words = (cJSON *)tth_get_edit_words(vhd);
+    if (!_edit_words) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "editWords", _edit_words);
+    
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+    
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_SPEAKER, TTH_CODE_SERVER_WORDS_TO_EDIT, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sNextTurn(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_speaker = (cJSON *)tth_get_speaker(vhd);
+    if (!_speaker) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "speaker", _speaker);
+
+    cJSON *_listener = (cJSON *)tth_get_listener(vhd);
+    if (!_listener) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "listener", _listener);
+
+    cJSON *_words = (cJSON *)tth_get_words(vhd);
+    if (!_words) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "words", _words);
+
+    cJSON *_words_count = (cJSON *)tth_get_words_count(vhd);
+    if (!_words_count) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "wordsCount", _words_count);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_NEXT_TURN, json_msg);
+    cJSON_Delete(_data);
+    cJSON_free(json_msg);
+
+    return 0;
+}
+
+int tth_sGameEnded(void *vhd, void *pss) {
+    cJSON *_data = cJSON_CreateObject();
+    if (!_data) {
+        return 1;
+    }
+
+    cJSON *_results = (cJSON *)tth_get_results(vhd);
+    if (!_results) {
+        return 1;
+    }
+    cJSON_AddItemToObject(_data, "results", _results);
+
+    char *json_msg = cJSON_Print(_data);
+    if (!json_msg) {
+        return 1;
+    }
+
+    __tth_send_signal(vhd, pss, TTH_DEST_CODE_ALL, TTH_CODE_SERVER_GAME_ENDED, json_msg);
     cJSON_Delete(_data);
     cJSON_free(json_msg);
 
