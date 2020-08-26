@@ -28,4 +28,6 @@ int tth_sNextTurn(void *vhd, void *pss);
 
 int tth_sGameEnded(void *vhd, void *pss);
 
+int tth_sPong(void *vhd, void *pss);
+
 #endif

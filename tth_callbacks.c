@@ -1022,3 +1022,8 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
 
     return 0;
 }
+
+int tth_callback_client_ping(void *_vhd, void *_pss) {
+    tth_sPong(_vhd, _pss);
+    return 0;
+}

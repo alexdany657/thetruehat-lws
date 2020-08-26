@@ -302,6 +302,8 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                         case TTH_CODE_CLIENT_WORDS_EDITED:
                             tth_callback_client_words_edited(vhd, pss, new_in, new_len);
                             break;
+                        case TTH_CODE_CLIENT_PING:
+                            tth_callback_client_ping(vhd, pss);
                         default:
                             // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
                             return 0;

@@ -13,14 +13,19 @@ __SIGNAL_CODES = {
     "sWordsToEdit": 9,
     "sNextTurn": 10,
     "sGameEnded": 11,
+    "pong": 49,
     "cJoinRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 0,
     "cLeaveRoom": __SIGNAL_CODES_CLIENT_INCREMENT + 1,
     "cStartGame": __SIGNAL_CODES_CLIENT_INCREMENT + 2,
     "cSpeakerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 3,
     "cListenerReady": __SIGNAL_CODES_CLIENT_INCREMENT + 4,
     "cEndWordExplanation": __SIGNAL_CODES_CLIENT_INCREMENT + 5,
-    "cWordsEdited": __SIGNAL_CODES_CLIENT_INCREMENT + 6
+    "cWordsEdited": __SIGNAL_CODES_CLIENT_INCREMENT + 6,
+    "ping": __SIGNAL_CODES_CLIENT_INCREMENT + 49
 }
+
+__PING_INTERVAL = 25000;
+__PING_TIME = 5000;
 
 function __str(a) {
     if (typeof(a) != typeof(0)) {
@@ -55,6 +60,10 @@ function io(url) {
         var code = data[0] * 10 + data[1] * 1;
         if (code >= __SIGNAL_CODES_CLIENT_INCREMENT) {
             console.warn("ws: io: onmessage: got client signal, ignoring.");
+            return;
+        }
+        if (code == __SIGNAL_CODES["pong"]) {
+            retObj.__got_pong = true;
             return;
         }
         data = data.slice(2);
@@ -105,5 +114,14 @@ function io(url) {
     retObj.onopen = function(callback) {
         retObj.__ws.onopen = callback;
     }
+    window.setInterval(function(retObj) {
+        retObj.__got_pong = false;
+        retObj.__ws.send(__str(__SIGNAL_CODES["ping"]));
+        window.setTimeout(function(retObj) {
+            if (!retObj.__got_pong) {
+                retObj.__ws.close(1000);
+            }
+        }, __PING_TIME, retObj);
+    }, __PING_INTERVAL, retObj);
     return retObj;
 }

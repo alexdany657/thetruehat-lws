@@ -1,4 +1,4 @@
-COMMON_FLAGS=-g -Wall
+COMMON_FLAGS=-g -Wall -std=gnu18
 
 all: tth
 

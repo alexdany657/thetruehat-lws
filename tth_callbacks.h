@@ -23,4 +23,6 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
 
 int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len);
 
+int tth_callback_client_ping(void *_vhd, void *_pss);
+
 #endif
