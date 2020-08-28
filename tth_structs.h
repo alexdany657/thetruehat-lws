@@ -3,9 +3,11 @@
 
 #include "tth_codes.h"
 
+#include <libwebsockets.h>
 #include <string.h>
 #include <stdint.h>
 #include <sys/time.h>
+#include <mysql.h>
 
 struct edit_words_data__tth {
     struct edit_words_data__tth *edit_list;
@@ -129,6 +131,8 @@ struct per_vhost_data__tth {
     struct edit_words_data__tth *edit_words;
 
     struct edit_words_data__tth *words;
+
+    MYSQL *conn;
 };
 
 #endif

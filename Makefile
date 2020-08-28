@@ -3,7 +3,7 @@ COMMON_FLAGS=-g -Wall -std=gnu18
 all: tth
 
 tth: tth.o tth_codes.o tth_callbacks.o tth_signals.o tth_json.o lib/libcJSON.so tth_timeout.o
-	gcc -o tth tth.o tth_codes.o tth_callbacks.o tth_signals.o tth_json.o tth_timeout.o -Llib -lwebsockets -lcJSON
+	gcc -o tth tth.o tth_codes.o tth_callbacks.o tth_signals.o tth_json.o tth_timeout.o -Llib -lwebsockets -lcJSON -L/usr/lib64/mysql -lmysqlclient
 
 tth_timeout.o: tth_timeout.h tth_timeout.c
 	gcc $(COMMON_FLAGS) -c -o tth_timeout.o tth_timeout.c
@@ -30,12 +30,12 @@ lib/libcJSON.so: cJSON/cJSON.o
 cJSON/cJSON.o: cJSON/cJSON.c
 	gcc -c -shared -fpic -fPIC -o cJSON/cJSON.o cJSON/cJSON.c
 
-.PHONY: cleanAll clean-o clean
+.PHONY: cleanAll clean-o clean all
 
 clean-o:
-	rm -v *.o
+	rm -vf *.o
 
 clean:
-	rm -v tth
+	rm -vf tth
 
 cleanAll: clean clean-o

@@ -87,6 +87,14 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->clientCnt = 1;
             vhd->msg_list = NULL;
             vhd->in_list = NULL;
+            vhd->conn = mysql_init(NULL);
+            if (!vhd->conn) {
+                abort();
+            }
+            if (!mysql_real_connect(vhd->conn, "localhost", "root", "root", "test", 0, NULL, 0)) {
+                abort();
+            }
+            mysql_query("INSERT INTO Games(State, Host) VALUES (\"wait\", \"\");"); // get GID and match with RID FIXME
             vhd->info = malloc(sizeof(struct info__tth));
             if (!vhd->info) {
                 lwsl_user("OOM: dropping\n");
@@ -127,6 +135,10 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->edit_words = NULL;
             vhd->words = NULL;
             __load_dict(vhd);
+            break;
+
+        case LWS_CALLBACK_PROTOCOL_DESTROY:
+            mysql_close(vhd->conn);
             break;
 
         case LWS_CALLBACK_ESTABLISHED:

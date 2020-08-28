@@ -3,12 +3,14 @@
 
 #include "tth_callbacks.h"
 #include "tth_signals.h"
+#include "tth_timeout.h"
+
+#include "cJSON/cJSON.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <libwebsockets.h>
-#include "cJSON/cJSON.h"
-#include "tth_timeout.h"
+#include <mysql.h>
 
 /* internal */
 
