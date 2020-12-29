@@ -1,6 +1,12 @@
-COMMON_FLAGS=-g -Wall -std=gnu18
+COMMON_FLAGS=-Wall -Wextra -g
 
-all: tth
+all: tth master_tth
+
+master_tth: master_tth.o
+	gcc -o master_tth master_tth.o -lwebsockets
+
+master_tth.o: master_tth.c protocol_master_tth.c tth_misc.h
+	gcc $(COMMON_FLAGS) -c -o master_tth.o master_tth.c
 
 tth: tth.o tth_codes.o tth_callbacks.o tth_signals.o tth_json.o lib/libcJSON.so tth_timeout.o
 	gcc -o tth tth.o tth_codes.o tth_callbacks.o tth_signals.o tth_json.o tth_timeout.o -Llib -lwebsockets -lcJSON
@@ -30,12 +36,13 @@ lib/libcJSON.so: cJSON/cJSON.o
 cJSON/cJSON.o: cJSON/cJSON.c
 	gcc -c -shared -fpic -fPIC -o cJSON/cJSON.o cJSON/cJSON.c
 
-.PHONY: cleanAll clean-o clean
+.PHONY: all cleanAll clean-o clean
 
 clean-o:
 	rm -v *.o
 
 clean:
-	rm -v tth
+	rm -fv tth
+	rm -fv master_tth
 
 cleanAll: clean clean-o

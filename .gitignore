@@ -6,6 +6,7 @@ lib/*
 
 # main executable
 tth
+master_tth
 
 # vim tmp files
 *.swp

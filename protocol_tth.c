@@ -304,6 +304,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                             break;
                         case TTH_CODE_CLIENT_PING:
                             tth_callback_client_ping(vhd, pss);
+                            break;
                         default:
                             // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
                             return 0;
@@ -321,7 +322,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
 
 #define LWS_PLUGIN_PROTOCOL_TTH \
     { \
-        "lws-tth", \
+        "lws-internal", \
         callback_tth, \
         sizeof(struct per_session_data__tth), \
         128, \
