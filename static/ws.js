@@ -55,7 +55,7 @@ function io(url, key) {
         console.error("Key can't be empty");
         return;
     }
-    retObj.__url = url + "?key=" + key;
+    retObj.url = url + "?key=" + key;
     retObj.__ws = new WebSocket(retObj.url, __PROTOCOL);
     retObj.__onmessage = function(msg) {
         console.debug(msg);
