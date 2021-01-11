@@ -11,7 +11,7 @@
 #include "protocol_master_tth.c"
 
 static struct lws_protocols protocols[] = {
-    { "http", lws_callback_http_dummy, 0, 0 },
+    /* { "http", lws_callback_http_dummy, 0, 0, 1, NULL, 0 }, */
     LWS_PLUGIN_PROTOCOL_MASTER_TTH,
     { NULL, NULL, 0, 0 } /* terminator */
 };
@@ -60,9 +60,12 @@ int main(int argc, char **argv) {
         /* for LLL_ verbosity above NOTICE to be built into lws,
          * lws must have been configured and built with
          * -DCMAKE_BUILD_TYPE=DEBUG instead of =RELEASE */
-        /* | LLL_INFO */ /* | LLL_PARSER */ /* | LLL_HEADER */
-        /* | LLL_EXT */ /* | LLL_CLIENT */ /* | LLL_LATENCY */
-        /* | LLL_DEBUG */;
+#ifndef NDEBUG
+         | LLL_INFO | LLL_PARSER | LLL_HEADER
+         | LLL_EXT | LLL_CLIENT | LLL_LATENCY
+         | LLL_DEBUG
+#endif
+        ;
 
     signal(SIGINT, sigint_handler);
 

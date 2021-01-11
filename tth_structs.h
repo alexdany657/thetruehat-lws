@@ -78,10 +78,18 @@ struct msg {
 };
 
 /* storage for in message fragments */
+
 struct in_msg {
     struct in_msg *in_list;
     char *payload;
     int len;
+};
+
+/* one of these is created for each http query */
+
+struct per_session_data_http__tth {
+    int status;
+    int body_part;
 };
 
 /* one of these is created for each client connecting to us */

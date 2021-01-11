@@ -13,7 +13,6 @@
 #include "tth_timeout.h"
 
 static struct lws_protocols protocols[] = {
-    { "http", lws_callback_http_dummy, 0, 0 },
     LWS_PLUGIN_PROTOCOL_TTH,
     { NULL, NULL, 0, 0 } /* terminator */
 };
@@ -46,25 +45,26 @@ void sigint_handler(int sig) {
 
 int main(int argc, char **argv) {
     int port;
-    if (argc != 2) {
-        lwsl_warn("usage: tth <port>\n");
+    if (argc != 4) {
+        lwsl_warn("usage: tth <port> <key> <auth port>\n");
         return 1;
     }
     port = atoi(*(argv+1));
-    if (!port) {
-        lwsl_err("port can't be 0\n");
-        return 1;
-    }
+    __load_key(*(argv+2));
 
     struct lws_context_creation_info info;
+    struct lws_client_connect_info i;
     struct lws_context *context;
     int n = 0, logs = LLL_USER | LLL_ERR | LLL_WARN | LLL_NOTICE
         /* for LLL_ verbosity above NOTICE to be built into lws,
          * lws must have been configured and built with
          * -DCMAKE_BUILD_TYPE=DEBUG instead of =RELEASE */
-        /* | LLL_INFO */ /* | LLL_PARSER */ /* | LLL_HEADER */
-        /* | LLL_EXT */ /* | LLL_CLIENT */ /* | LLL_LATENCY */
-        /* | LLL_DEBUG */;
+#ifndef NDEBUG
+        | LLL_INFO | LLL_PARSER | LLL_HEADER
+        | LLL_EXT | LLL_CLIENT | LLL_LATENCY
+        | LLL_DEBUG
+#endif
+        ;
 
     signal(SIGINT, sigint_handler);
     tth_timer_init();
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 
     lws_set_log_level(logs, NULL);
 
-    memset(&info, 0, sizeof info); /* otherwise uninitialized garbage */
+    memset(&info, 0, sizeof(struct lws_context_creation_info)); /* otherwise uninitialized garbage */
     info.port = port;
     info.mounts = &mount;
     info.protocols = protocols;
@@ -82,6 +82,22 @@ int main(int argc, char **argv) {
     context = lws_create_context(&info);
     if (!context) {
         lwsl_err("lws init failed\n");
+        return 1;
+    }
+
+    memset(&i, 0, sizeof(struct lws_client_connect_info)); /* otherwise uninitialized garbage */
+    i.context = context;
+    i.port = atoi(*(argv+3));
+    i.address = "localhost";
+    i.path = "/server_auth";
+    i.host = i.address;
+    i.origin = i.address;
+    i.method = "POST";
+    i.protocol = protocols[0].name;
+    i.ssl_connection = LCCSCF_HTTP_MULTIPART_MIME;
+
+    if (!lws_client_connect_via_info(&i)) {
+        lwsl_err("Failed to create connection to master server, dropping\n");
         return 1;
     }
 
