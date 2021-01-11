@@ -1,11 +1,25 @@
+# include
+include/*
+
 # libraries
 lib/*
+
+# var
+var/*
 
 # o-files
 *.o
 
+# config
+config.h
+
 # main executable
 tth
+master_tth
+
+# debug executable
+tth.d
+master_tth.d
 
 # vim tmp files
 *.swp

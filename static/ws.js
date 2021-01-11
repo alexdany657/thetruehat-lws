@@ -26,6 +26,8 @@ __SIGNAL_CODES = {
 
 __PING_INTERVAL = 25000;
 __PING_TIME = 5000;
+__RECONNECT_TIME = 1000;
+__PROTOCOL = "lws-tth";
 
 function __str(a) {
     if (typeof(a) != typeof(0)) {
@@ -47,10 +49,15 @@ function __str(a) {
     return ans;
 }
 
-function io(url) {
+function io(url, key) {
     var retObj = {};
-    retObj.__ws = new WebSocket(url, "lws-tth");
-    retObj.__ws.onmessage = function(msg) {
+    if (key == "") {
+        console.error("Key can't be empty");
+        return;
+    }
+    retObj.url = url + "?key=" + key;
+    retObj.__ws = new WebSocket(retObj.url, __PROTOCOL);
+    retObj.__onmessage = function(msg) {
         console.debug(msg);
         var data = msg.data;
         if (data[0] < '0' || data[0] > '9' || data[1] < '0' || data[1] > '9') {
@@ -86,14 +93,26 @@ function io(url) {
         for (var i = 0; i < retObj.__sigListeners[signal].length; ++i) {
             retObj.__sigListeners[signal][i](JSON.parse(data));
         }
-    }
+    };
+    retObj.__ws.onmessage = retObj.__onmessage;
     retObj.__sigListeners = {};
+    retObj.__reconnect = false;
+    retObj.__closed = false;
+    retObj.reconnect = function() {
+        window.setTimeout(function(retObj) {
+            retObj.__ws = new WebSocket(retObj.url, __PROTOCOL);
+            retObj.__ws.onmessage = retObj.__onmessage;
+            retObj.__ws.onopen = retObj.__onopen;
+            retObj.__ws.onerror = retObj.__onerror;
+            retObj.__ws.onclose = retObj.__onclose;
+        }, __RECONNECT_TIME, retObj);
+    };
     retObj.on = function(signal, callback) {
         if (!(signal in retObj.__sigListeners)) {
             retObj.__sigListeners[signal] = [];
         }
         retObj.__sigListeners[signal].push(callback);
-    }
+    };
     retObj.emit = function(signal, data) {
         if (!(signal in __SIGNAL_CODES)) {
             console.warn("ws: io: emit: improper signal, ignoring.", signal, data);
@@ -104,15 +123,27 @@ function io(url) {
             return;
         }
         retObj.__ws.send(__str(__SIGNAL_CODES[signal]) + JSON.stringify(data));
-    }
+    };
     retObj.onclose = function(callback) {
-        retObj.__ws.onclose = callback;
-    }
+        retObj.__onclose = function(event) {
+            if (event.code == 1000 && (!retObj.__closed)) {
+                retObj.reconnect();
+            }
+            callback(event);
+        };
+        retObj.__ws.onclose = retObj.__onclose;
+    };
     retObj.onerror = function(callback) {
-        retObj.__ws.onerror = callback;
-    }
+        retObj.__onerror = callback;
+        retObj.__ws.onerror = retObj.__onerror;
+    };
     retObj.onopen = function(callback) {
-        retObj.__ws.onopen = callback;
+        retObj.__onopen = callback;
+        retObj.__ws.onopen = retObj.__onopen;
+    };
+    retObj.close = function() {
+        retObj.__closed = true;
+        retObj.__ws.close(1000);
     }
     window.setInterval(function(retObj) {
         retObj.__got_pong = false;

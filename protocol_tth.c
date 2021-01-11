@@ -20,6 +20,30 @@
 
 #define TRANSPORT_DELAY 1000
 
+static char *key = NULL;
+static char *port_str = NULL;
+
+int __load_key(char *_key) {
+    key = malloc(sizeof(char) * strlen(_key));
+    if (!key) {
+        lwsl_user("OOM: dropping\n");
+        return 1;
+    }
+    memcpy(key, _key, sizeof(char) * strlen(_key));
+    return 0;
+}
+
+int __load_port(struct lws_vhost *vhost) {
+    int port = lws_get_vhost_listen_port(vhost);
+    port_str = malloc(sizeof(char) * snprintf(NULL, 0, "%i", port));
+    if (!port_str) {
+        lwsl_user("OOM: dropping\n");
+        return 1;
+    }
+    sprintf(port_str, "%i", port);
+    return 0;
+}
+
 void __load_dict(void *_vhd) {
     struct per_vhost_data__tth *vhd = (struct per_vhost_data__tth *)_vhd;
 
@@ -72,6 +96,108 @@ void __load_dict(void *_vhd) {
     vhd->dict_list = new_dict;
     vhd->info->dict = new_dict;
 
+}
+
+static int callback_http(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
+    struct per_session_data_http__tth *pss = (struct per_session_data_http__tth *)user;
+    char buf[LWS_PRE + 1024], *start = &buf[LWS_PRE], *p = start, *end = &buf[sizeof(buf) - LWS_PRE - 1];
+    int n;
+
+    switch (reason) {
+        case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+            lwsl_err("CLIENT_CONNECTION_ERROR: %s\n", in ? (char *)in : "(null)");
+            break;
+
+        case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
+            break;
+
+        case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
+            pss->status = lws_http_client_http_response(wsi);
+            lwsl_user("Connected with server response: %d\n", pss->status);
+            break;
+
+        case LWS_CALLBACK_RECEIVE_CLIENT_HTTP_READ:
+            lwsl_user("RECEIVE_CLIENT_HTTP_READ: read %d\n", (int)len);
+            lwsl_hexdump_notice(in, len);
+            return 0;
+
+        case LWS_CALLBACK_RECEIVE_CLIENT_HTTP:
+            n = sizeof(buf) - LWS_PRE;
+            if (lws_http_client_read(wsi, &p, &n) < 0) {
+                return -1;
+            }
+            return 0;
+
+        case LWS_CALLBACK_COMPLETED_CLIENT_HTTP:
+            if (pss->status != 202) {
+                lws_cancel_service(lws_get_context(wsi));
+            }
+            lwsl_user("Successfull auth\n");
+            break;
+
+        case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
+            if (!lws_http_is_redirected_to_get(wsi)) {
+                lwsl_user("%s: doing POST flow\n", __func__);
+                lws_client_http_body_pending(wsi, 1);
+                lws_callback_on_writable(wsi);
+            } else {
+                lwsl_user("%s: doing GET flow\n", __func__);
+            }
+            break;
+
+        case LWS_CALLBACK_CLIENT_HTTP_WRITEABLE:
+            if (lws_http_is_redirected_to_get(wsi)) {
+                        break;
+            }
+            lwsl_user("LWS_CALLBACK_CLIENT_HTTP_WRITEABLE\n");
+            n = LWS_WRITE_HTTP;
+
+            switch (pss->body_part++) {
+                case 0:
+                    if (lws_client_http_multipart(wsi, "key", NULL, NULL, &p, end)) {
+                        return -1;
+                    }
+                    /* notice every usage of the boundary starts with -- */
+                    p += lws_snprintf(p, end - p, key);
+                    break;
+
+                case 1:
+                    if (lws_client_http_multipart(wsi, "port", NULL, NULL, &p, end)) {
+                        return -1;
+                    }
+                    __load_port(lws_get_vhost(wsi));
+                    p += lws_snprintf(p, end - p, port_str);
+                    break;
+
+                case 2:
+                    if (lws_client_http_multipart(wsi, NULL, NULL, NULL, &p, end)) {
+                        return -1;
+                    }
+                    lws_client_http_body_pending(wsi, 0);
+                     /* necessary to support H2, it means we will write no
+                      * more on this stream */
+                    n = LWS_WRITE_HTTP_FINAL;
+                    break;
+
+                default:
+                    return 0;
+            }
+
+            if (lws_write(wsi, (uint8_t *)start, lws_ptr_diff(p, start), n) != lws_ptr_diff(p, start)) {
+                return 1;
+            }
+
+            if (n != LWS_WRITE_HTTP_FINAL) {
+                lws_callback_on_writable(wsi);
+            }
+
+            return 0;
+
+        default:
+            break;
+    }
+
+    return lws_callback_http_dummy(wsi, reason, user, in, len);
 }
 
 static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
@@ -316,6 +442,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                             break;
                         case TTH_CODE_CLIENT_PING:
                             tth_callback_client_ping(vhd, pss);
+                            break;
                         default:
                             // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
                             return 0;
@@ -333,7 +460,14 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
 
 #define LWS_PLUGIN_PROTOCOL_TTH \
     { \
-        "lws-tth", \
+        "http", \
+        callback_http, \
+        sizeof(struct per_session_data_http__tth), \
+        0, \
+        0, NULL, 0 \
+    }, \
+    { \
+        "lws-internal", \
         callback_tth, \
         sizeof(struct per_session_data__tth), \
         128, \

@@ -16,6 +16,13 @@
     } \
 }
 
+#define __print_ll(___type, ___list_head, ___m_list) { \
+    lws_start_foreach_llp(___type **, ___ptr, ___list_head) { \
+        lwsl_err("%p->", *___ptr); \
+    } lws_end_foreach_llp(___ptr, ___m_list); \
+    lwsl_err("(null)\n"); \
+}
+
 #define __time_cmp(___a, ___b) \
     (___a->tv_sec > ___b->tv_sec || \
      (___a->tv_sec == ___b->tv_sec && \
