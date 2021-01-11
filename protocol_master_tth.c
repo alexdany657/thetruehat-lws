@@ -15,6 +15,9 @@
 #include "config.h"
 
 #define MAX_KEY_LENGTH 64
+#define NUM_OF_CONN_MAX 1024
+
+static int NUM_OF_CONN = 0;
 
 static const char * const param_names[] = {
     "key",
@@ -103,7 +106,12 @@ static void connection_attempt_mas(void *_vhd, void *_pss, void *_key) {
         }
     } lws_end_foreach_llp(ppkl, key_list);
 
-    if (port == 0) {
+    if (NUM_OF_CONN == NUM_OF_CONN_MAX) {
+        lwsl_warn("Maximum amount of connections reached, dropping\n");
+        __close(vhd, pss);
+        return;
+    }
+    if (port == 0 && NUM_OF_CONN < NUM_OF_CONN_MAX) {
         struct key__mas *new_key = malloc(sizeof(struct key__mas));
         if (!new_key) {
             lwsl_user("OOM: dropping\n");
@@ -127,6 +135,7 @@ static void connection_attempt_mas(void *_vhd, void *_pss, void *_key) {
         }
         sprintf(mas_port, "%i", lws_get_vhost_listen_port(vhd->vhost));
 
+        NUM_OF_CONN++;
         pid_t pid = fork();
         if (pid == 0) {
             /* execl("/usr/bin/ssh", "ssh", "-l", "thehat", "localhost", "/home/thehat/bin/start_tth", "0", NULL); */
@@ -281,6 +290,10 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
             }
             const char *key = lws_get_urlarg_by_name(wsi, "key", key_buff, 4 + MAX_KEY_LENGTH) + 1;
             lwsl_warn("key: %s, len: %li\n", key, strlen(key));
+            if (strlen(key) == 0) {
+                lwsl_warn("Key can't be empty\n");
+                __close(vhd, pss);
+            }
             /* open connection to backend and bind it */
             connection_attempt_mas(vhd, pss, (void *)key);
             free(key_buff);

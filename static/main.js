@@ -8,7 +8,7 @@ window.onload = function() {
             console.error("Already connected");
             return;
         }
-        socket = io(((window.location.protocol == "http:") ? "ws" : "wss") + "://" + window.location.host + window.location.pathname + "?key=" + document.querySelector("#key").value);
+        socket = io(((window.location.protocol == "http:") ? "ws" : "wss") + "://" + window.location.host + window.location.pathname, document.querySelector("#key").value);
         var signals = ["sPlayerJoined", "sPlayerLeft", "sMessage", "sYouJoined", "sGameStarted", "sExplanationStarted",
         "sWordExplanationEnded", "sNewWord", "sExplanationEnded", "sWordsToEdit", "sNextTurn", "sGameEnded"];
         for (var i = 0; i < signals.length; ++i) {

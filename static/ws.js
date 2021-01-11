@@ -49,9 +49,14 @@ function __str(a) {
     return ans;
 }
 
-function io(url) {
+function io(url, key) {
     var retObj = {};
-    retObj.__ws = new WebSocket(url, __PROTOCOL);
+    if (key == "") {
+        console.error("Key can't be empty");
+        return;
+    }
+    retObj.__url = url + "?key=" + key;
+    retObj.__ws = new WebSocket(retObj.url, __PROTOCOL);
     retObj.__onmessage = function(msg) {
         console.debug(msg);
         var data = msg.data;
@@ -95,7 +100,7 @@ function io(url) {
     retObj.__closed = false;
     retObj.reconnect = function() {
         window.setTimeout(function(retObj) {
-            retObj.__ws = new WebSocket(url, __PROTOCOL);
+            retObj.__ws = new WebSocket(retObj.url, __PROTOCOL);
             retObj.__ws.onmessage = retObj.__onmessage;
             retObj.__ws.onopen = retObj.__onopen;
             retObj.__ws.onerror = retObj.__onerror;
