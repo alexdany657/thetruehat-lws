@@ -38,6 +38,23 @@ static const struct lws_http_mount mount = {
     /* .basic_auth_login_file */    NULL,
 };
 
+void sigchld_handler(int sig) {
+    pid_t pid;
+    int status;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (WIFEXITED(status)) {
+            if (WEXITSTATUS(status)) {
+                lwsl_warn("Process %i exited with nonzero code %i\n", pid, WEXITSTATUS(status));
+            }
+        } else {
+            lwsl_warn("Process %i returned with status %i\n", pid, status);
+        }
+    }
+    if (pid) {
+        lwsl_warn("Wait returned negative pid %i\n", pid);
+    }
+}
+
 void sigint_handler(int sig) {
     interrupted = 1;
 }
@@ -68,6 +85,7 @@ int main(int argc, char **argv) {
         ;
 
     signal(SIGINT, sigint_handler);
+    signal(SIGCHLD, sigchld_handler);
 
     lws_set_log_level(logs, NULL);
 
