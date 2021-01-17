@@ -1,0 +1,5 @@
+#!/bin/bash
+
+. config.sh
+
+./$MASTER_EXEC_NAME 4005 1> var/log/master.all.log 2>&1 &
