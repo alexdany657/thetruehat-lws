@@ -104,6 +104,9 @@ static void connection_attempt_mas(void *_vhd, void *_pss, void *_key) {
             port = (*ppkl)->port;
             cur_key = *ppkl;
         }
+#ifndef NDEBUG
+            lwsl_warn("strings %s and %s %s\n", key, (*ppkl)->key, (strncmp(key, (*ppkl)->key, MAX_KEY_LENGTH) ? "differ" : "are equal"));
+#endif
     } lws_end_foreach_llp(ppkl, key_list);
 
     if (NUM_OF_CONN == NUM_OF_CONN_MAX) {
