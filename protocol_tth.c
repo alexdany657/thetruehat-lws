@@ -24,23 +24,34 @@ static char *key = NULL;
 static char *port_str = NULL;
 
 int __load_key(char *_key) {
-    key = malloc(sizeof(char) * strlen(_key));
+    key = malloc(sizeof(char) * (strlen(_key)+1));
     if (!key) {
         lwsl_user("OOM: dropping\n");
         return 1;
     }
-    memcpy(key, _key, sizeof(char) * strlen(_key));
+    strcpy(key, _key);
+    lwsl_warn("key: %s, %s\n", key, _key);
+    return 0;
+}
+
+int __destroy_key() {
+    free(key);
     return 0;
 }
 
 int __load_port(struct lws_vhost *vhost) {
     int port = lws_get_vhost_listen_port(vhost);
-    port_str = malloc(sizeof(char) * snprintf(NULL, 0, "%i", port));
+    port_str = malloc(sizeof(char) * (snprintf(NULL, 0, "%i", port)+1));
     if (!port_str) {
         lwsl_user("OOM: dropping\n");
         return 1;
     }
     sprintf(port_str, "%i", port);
+    return 0;
+}
+
+int __destroy_port() {
+    free(port_str);
     return 0;
 }
 
@@ -92,6 +103,7 @@ void __load_dict(void *_vhd) {
         nread = getline(&line, &len, fdict);
     }
     fclose(fdict);
+    free(line);
 
     vhd->dict_list = new_dict;
     vhd->info->dict = new_dict;
@@ -234,6 +246,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->info->settings->explanation_time = 40000;
             vhd->info->settings->aftermath_time = 3000;
             vhd->info->settings->strict_mode = 0;
+            vhd->info->settings->dictionary_id = 0;
             vhd->info->dict = NULL;
             vhd->info->start_time = malloc(sizeof(struct timeval));
             if (!vhd->info->start_time) {
@@ -254,7 +267,42 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
             vhd->edit_words = NULL;
             vhd->words = NULL;
             __load_dict(vhd);
+            lwsl_warn("Init finished\n");
             break;
+
+        case LWS_CALLBACK_PROTOCOL_DESTROY:
+            {
+            int i;
+            free(vhd->info->start_time);
+            free(vhd->info->end_explanation_time);
+            free(vhd->info->end_aftermath_time);
+            for (i = 0; i < vhd->info->dict->len; ++i) {
+                free(vhd->info->dict->words[i]);
+            }
+            free(vhd->info->dict->words);
+            free(vhd->info->dict);
+            free(vhd->info->settings);
+            free(vhd->info);
+            struct edit_words_data__tth *pedit = vhd->edit_words;
+            while (pedit) {
+                void *tmp = pedit;
+                pedit = pedit->edit_list;
+                free(tmp);
+            }
+            pedit = vhd->words;
+            while (pedit) {
+                void *tmp = pedit;
+                pedit = pedit->edit_list;
+                free(tmp);
+            }
+            struct word_data__tth *pwords = vhd->fresh_words;
+            while (pwords) {
+                void *tmp = pwords;
+                pwords = pwords->word_list;
+                free(tmp);
+            }
+            break;
+            }
 
         case LWS_CALLBACK_ESTABLISHED:
             /* add ourselves to the list of live pss held in the vhd */
@@ -364,6 +412,8 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                     ___ll_bck_insert(struct in_msg, curr_msg, in_list, vhd->in_list);
                 }
                 if (final) {
+                    void *old_in = in;
+                    char fl = 0;
                     if (!first) {
                         int summ_len = 0;
                         lws_start_foreach_llp(struct in_msg **, ppim, vhd->in_list) {
@@ -380,6 +430,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                             summ_len += (*ppim)->len;
                         } lws_end_foreach_llp(ppim, in_list);
                         in = all_payload;
+                        fl = 1;
                         len = summ_len;
                         struct in_msg *tmp = vhd->in_list;
                         while (tmp) {
@@ -388,6 +439,7 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                             tmp = tmp->in_list;
                             free(_tmp);
                         }
+                        vhd->in_list = NULL;
                     }
 
                     enum tth_code code;
@@ -434,9 +486,17 @@ static int callback_tth(struct lws *wsi, enum lws_callback_reasons reason, void 
                             break;
                         default:
                             // lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, NULL, 0);
+                            if (fl) {
+                                free(in);
+                                in = old_in;
+                            }
                             return 0;
                     }
 
+                    if (fl) {
+                        free(in);
+                        in = old_in;
+                    }
                     break;
                 }
             }

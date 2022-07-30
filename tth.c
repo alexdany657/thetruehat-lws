@@ -2,6 +2,7 @@
  * some code taken from official lws example "lws-minimal": https://libwebsockets.org/git/libwebsockets/tree/minimal-examples/ws-server/minimal-ws-server?h=v4.0-stable
  */
 
+#define _GNU_SOURCE
 #include <libwebsockets.h>
 #include <string.h>
 #include <signal.h>
@@ -14,7 +15,7 @@
 
 static struct lws_protocols protocols[] = {
     LWS_PLUGIN_PROTOCOL_TTH,
-    { NULL, NULL, 0, 0 } /* terminator */
+    { NULL, NULL, 0, 0, 0, NULL, 0, } /* terminator */
 };
 
 static int interrupted;
@@ -37,9 +38,10 @@ static const struct lws_http_mount mount = {
     /* .origin_protocol */          LWSMPRO_FILE,   /* files in a dir */
     /* .mountpoint_len */           1,              /* char count */
     /* .basic_auth_login_file */    NULL,
+    /* ._unused */                  {NULL, NULL,},
 };
 
-void sigint_handler(int sig) {
+void sigint_handler(int) {
     interrupted = 1;
 }
 
@@ -101,10 +103,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    interrupted = 0;
     while (n >= 0 && !interrupted)
         n = lws_service(context, 0);
 
     lws_context_destroy(context);
+    __destroy_key();
+    __destroy_port();
 
     return 0;
 }

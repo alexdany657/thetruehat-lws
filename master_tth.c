@@ -2,10 +2,12 @@
  * some code taken from official lws example "lws-minimal": https://libwebsockets.org/git/libwebsockets/tree/minimal-examples/ws-server/minimal-ws-server?h=v4.0-stable
  */
 
+#define _GNU_SOURCE
 #include <libwebsockets.h>
 #include <string.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <sys/wait.h>
 
 #define LWS_PLUGIN_STATIC
 #include "protocol_master_tth.c"
@@ -13,7 +15,7 @@
 static struct lws_protocols protocols[] = {
     /* { "http", lws_callback_http_dummy, 0, 0, 1, NULL, 0 }, */
     LWS_PLUGIN_PROTOCOL_MASTER_TTH,
-    { NULL, NULL, 0, 0 } /* terminator */
+    { NULL, NULL, 0, 0, 0, NULL, 0, } /* terminator */
 };
 
 static int interrupted;
@@ -36,9 +38,10 @@ static const struct lws_http_mount mount = {
     /* .origin_protocol */          LWSMPRO_FILE,   /* files in a dir */
     /* .mountpoint_len */           1,              /* char count */
     /* .basic_auth_login_file */    NULL,
+    /* ._unused */                  {NULL, NULL,},
 };
 
-void sigchld_handler(int sig) {
+void sigchld_handler(int) {
     pid_t pid;
     int status;
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
@@ -55,7 +58,7 @@ void sigchld_handler(int sig) {
     }
 }
 
-void sigint_handler(int sig) {
+void sigint_handler(int) {
     interrupted = 1;
 }
 
@@ -104,6 +107,8 @@ int main(int argc, char **argv) {
 
     while (n >= 0 && !interrupted)
         n = lws_service(context, 0);
+
+    clear_key_list();
 
     lws_context_destroy(context);
 

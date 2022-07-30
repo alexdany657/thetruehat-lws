@@ -4,4 +4,4 @@ cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1
 
 . config.sh
 
-./$EXEC_NAME $@ 1> var/log/$$.all.log 2>&1 &
+$EXEC_NAME $@ 1> var/log/$$.all.log 2>&1 &

@@ -1,9 +1,11 @@
+#define _GNU_SOURCE
 #include "tth_structs.h"
 #include "tth_misc.h"
 
 #include "tth_callbacks.h"
 #include "tth_signals.h"
 
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <libwebsockets.h>
@@ -80,8 +82,10 @@ void __new_word_callback(void *_args) {
     tth_sNewWord(args->vhd, args->pss);
 }
 
-void __stop_callback(void *args) {
-    exit(0);
+void __stop_callback(void *) {
+    pid_t pid;
+    pid = getpid();
+    kill(pid, SIGINT);
 }
 
 void __start_explanation(void *_vhd, void *_pss) {
@@ -144,6 +148,7 @@ void __start_explanation(void *_vhd, void *_pss) {
 
 end:
     tth_sExplanationStarted(vhd, pss);
+    free(time);
 }
 
 int __randrange(int a, int b) {
@@ -151,7 +156,7 @@ int __randrange(int a, int b) {
     rnd *= (b - a);
     rnd /= RAND_MAX;
     rnd += a;
-    if (rnd >= b) {
+    if (rnd >= (uint64_t)b) {
         if (b) {
             return b - 1;
         }
@@ -218,6 +223,7 @@ void __end_game(void *_vhd, void *_pss) {
     time->tv_sec = wtime / 1000;
     time->tv_usec = wtime % 1000 * 1000000;
     tth_set_timeout(time, &__stop_callback, NULL);
+    free(time);
 
     vhd->info->state = TTH_STATE_WAIT;
     vhd->info->substate = TTH_SUBSTATE_UNDEFINED;
@@ -229,6 +235,7 @@ void __end_game(void *_vhd, void *_pss) {
         puser = puser->user_list;
         free(tmp);
     }
+    vhd->user_list = NULL;
 }
 
 /* external */
@@ -321,7 +328,7 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
         return 1;
     }
 
-    char *username = malloc(strlen(_username->valuestring));
+    char *username = malloc(strlen(_username->valuestring) + 1);
     if (!username) {
         lwsl_user("OOM: dropping\n");
         tth_sMessage(vhd, pss, "Server error", "error", "cJoinRoom");
@@ -347,6 +354,7 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
     // if user is already in room
     if (puser_pss) {
         tth_sMessage(vhd, pss, "Client is already in room", "error", "cJoinRoom");
+        free(username);
         return 1;
     }
 
@@ -354,12 +362,14 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
     if (!puser) {
         if (vhd->info->state != TTH_STATE_WAIT) {
             tth_sMessage(vhd, pss, "State isn't 'play', only logging in can be perfomed", "error", "cJoinRoom");
+            free(username);
             return 1;
         }
         puser = malloc(sizeof(struct user_data__tth));
         if (!puser) {
             lwsl_user("OOM: dropping\n");
             tth_sMessage(vhd, pss, "Server error", "error", "cJoinRoom");
+            free(username);
             return 1;
         }
         memset(puser, 0, sizeof(struct user_data__tth));
@@ -369,6 +379,7 @@ int tth_callback_client_join_room(void *_vhd, void *_pss, char *msg, int len) {
     // check if data is valid
     if (puser->online) {
         tth_sMessage(vhd, pss, "Username is already in use", "error", "cJoinRoom");
+        free(username);
         return 1;
     }
 
@@ -701,12 +712,14 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
 
     if (__time_cmp(vhd->info->start_time, curr_time)) {
         tth_sMessage(vhd, pss, "Too early", "error", "cEndWordExplanation");
+        free(curr_time);
         return 1;
     }
     /*
      * no need
     if (__time_cmp(curr_time, vhd->info->end_aftermath_time)) {
         tth_sMessage(vhd, pss, "Too late", "error", "cEndWordExplanation");
+        free(curr_time);
         return 1;
     }
     */
@@ -716,17 +729,20 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
     cJSON *_data = cJSON_ParseWithLength(msg, len);
     if (!_data) {
         tth_sMessage(vhd, pss, "Server error", "error", "cEndWordExplanation");
+        free(curr_time);
         return 1;
     }
     
     __cause = cJSON_GetObjectItemCaseSensitive(_data, "cause");
     if (!cJSON_IsString(__cause)) {
         tth_sMessage(vhd, pss, "Improper type of field `cause`, not a string", "error", "cEndWordExplanation");
+        free(curr_time);
         return 1;
     }
 
     char *_cause = __cause->valuestring;
     enum tth_cause_code cause = __get_cause(_cause);
+    cJSON_Delete(_data);
 
     switch (cause) {
         case TTH_CAUSE_CODE_EXPLAINED:
@@ -734,6 +750,7 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
             struct edit_words_data__tth *word = malloc(sizeof(struct edit_words_data__tth));
             if (!word) {
                 tth_sMessage(vhd, pss, "server error", "error", "cEndWordExplanation");
+                free(curr_time);
                 return 1;
             }
             word->word = vhd->info->word;
@@ -763,6 +780,7 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
             struct edit_words_data__tth *word = malloc(sizeof(struct edit_words_data__tth));
             if (!word) {
                 tth_sMessage(vhd, pss, "server error", "error", "cEndWordExplanation");
+                free(curr_time);
                 return 1;
             }
             word->word = vhd->info->word;
@@ -781,8 +799,11 @@ int tth_callback_client_end_word_explanation(void *_vhd, void *_pss, char *msg, 
             break;
         case TTH_CAUSE_CODE_INVALID:
             tth_sMessage(vhd, pss, "Improper value of field `cause`", "error", "cEndWordExplanation");
+            free(curr_time);
             return 1;
     }
+
+    free(curr_time);
 
     return 0;
 }
@@ -841,15 +862,18 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
     cJSON *_data = cJSON_ParseWithLength(msg, len);
     if (!_data) {
         tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+        cJSON_Delete(_data);
         return 1;
     }
     _words = cJSON_GetObjectItemCaseSensitive(_data, "editWords");
     if (!_words) {
         tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
+        cJSON_Delete(_data);
         return 1;
     }
     if (!cJSON_IsArray(_words)) {
         tth_sMessage(vhd, pss, "Incorrect type of field 'editWords'", "error", "cWordsEdited");
+        cJSON_Delete(_data);
         return 1;
     }
     int cnt = 0;
@@ -859,6 +883,7 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
     
     if (cJSON_GetArraySize(_words) != cnt) {
         tth_sMessage(vhd, pss, "Incorrect number of words", "error", "cWordsEdited");
+        cJSON_Delete(_data);
         return 1;
     }
 
@@ -868,11 +893,13 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
     cJSON_ArrayForEach(_word, _words) {
         if (!cJSON_IsObject(_word)) {
             tth_sMessage(vhd, pss, "Incorrect type of element field 'editWords'", "error", "cWordsEdited");
+            cJSON_Delete(_data);
             return 1;
         }
         cJSON *_aword = cJSON_GetObjectItemCaseSensitive(_word, "word");
         if (!cJSON_IsString(_aword)) {
             tth_sMessage(vhd, pss, "Incorrect type of field 'word'", "error", "cWordsEdited");
+            cJSON_Delete(_data);
             return 1;
         }
         if (strcmp(curr_word->word, _aword->valuestring)) {
@@ -881,16 +908,19 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
             if (!error_msg) {
                 tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
                 lwsl_user("OOM: dropping\n");
+                cJSON_Delete(_data);
                 return 1;
             }
             sprintf(error_msg, "Incorrect word on position %i", cnt);
             tth_sMessage(vhd, pss, error_msg, "error", "cWordsEdited");
             free(error_msg);
+            cJSON_Delete(_data);
             return 1;
         }
         cJSON *_cause = cJSON_GetObjectItemCaseSensitive(_word, "wordState");
         if (!cJSON_IsString(_cause)) {
             tth_sMessage(vhd, pss, "Incorrect type of field 'wordState'", "error", "cWordsEdited");
+            cJSON_Delete(_data);
             return 1;
         }
         enum tth_cause_code cause = __get_cause(_cause->valuestring);
@@ -901,6 +931,7 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
                 break;
             case TTH_CAUSE_CODE_INVALID:
                 tth_sMessage(vhd, pss, "Incorrect value of field 'wordState'", "error", "cWordsEdited");
+                cJSON_Delete(_data);
                 return 1;
         }
         curr_word = curr_word->edit_list;
@@ -913,11 +944,13 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
     cJSON_ArrayForEach(_word, _words) {
         if (!cJSON_IsObject(_word)) {
             tth_sMessage(vhd, pss, "Incorrect value of field 'editWords'", "error", "cWordsEdited");
+            cJSON_Delete(_data);
             return 1;
         }
         cJSON *_aword = cJSON_GetObjectItemCaseSensitive(_word, "word");
         if (!cJSON_IsString(_aword)) {
             tth_sMessage(vhd, pss, "Incorrect value of field 'word'", "error", "cWordsEdited");
+            cJSON_Delete(_data);
             return 1;
         }
         if (strcmp(curr_word->word, _aword->valuestring)) {
@@ -926,16 +959,19 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
             if (!error_msg) {
                 tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
                 lwsl_user("OOM: dropping\n");
+                cJSON_Delete(_data);
                 return 1;
             }
             sprintf(error_msg, "Incorrect word on position %i", cnt);
             tth_sMessage(vhd, pss, error_msg, "error", "cWordsEdited");
             free(error_msg);
+            cJSON_Delete(_data);
             return 1;
         }
         cJSON *_cause = cJSON_GetObjectItemCaseSensitive(_word, "wordState");
         if (!cJSON_IsString(_cause)) {
             tth_sMessage(vhd, pss, "Incorrect type of field 'wordState'", "error", "cWordsEdited");
+            cJSON_Delete(_data);
             return 1;
         }
         enum tth_cause_code cause = __get_cause(_cause->valuestring);
@@ -957,12 +993,14 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
                     speaker->score_explained++;
                     listener->score_guessed++;
                 }
+                /* fall through */
             case TTH_CAUSE_CODE_MISTAKE:
                 {
                 struct edit_words_data__tth *__word = malloc(sizeof(struct edit_words_data__tth));
                 if (!__word) {
                     tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
                     lwsl_user("OOM: dropping\n");
+                    cJSON_Delete(_data);
                     return 1;
                 }
                 __word->word = curr_word->word;
@@ -983,6 +1021,7 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
                 if (!__word) {
                     tth_sMessage(vhd, pss, "server error", "error", "cWordsEdited");
                     lwsl_user("OOM: dropping\n");
+                    cJSON_Delete(_data);
                     return 1;
                 }
                 __word->word_list = NULL;
@@ -1004,11 +1043,13 @@ int tth_callback_client_words_edited(void *_vhd, void *_pss, char *msg, int len)
                 break;
             case TTH_CAUSE_CODE_INVALID:
                 tth_sMessage(vhd, pss, "Incorrect value of field 'wordState'", "error", "cWordsEdited");
+                cJSON_Delete(_data);
                 return 1;
         }
         curr_word = curr_word->edit_list;
     }
-    
+    cJSON_Delete(_data);
+
     vhd->info->substate = TTH_SUBSTATE_WAIT;
 
     if (!vhd->fresh_words) {

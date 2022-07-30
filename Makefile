@@ -1,7 +1,7 @@
-COMMON_FLAGS_D=-Wall -Wextra -g -Iinclude
+COMMON_FLAGS_D=-Wall -Wextra -g -Iinclude -std=c99
 LD_FLAGS_D=-Llib
 
-COMMON_FLAGS=-Wall -Wextra -DNDEBUG
+COMMON_FLAGS=-Wall -Wextra -DNDEBUG -std=c99 -g
 
 release: tth master_tth
 

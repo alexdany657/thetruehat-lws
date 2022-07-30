@@ -1,9 +1,11 @@
+#define _GNU_SOURCE
+#define _XOPEN_SOURCE 700
 #include "tth_timeout.h"
 #include "tth_misc.h"
 
+#include <signal.h>
 #include <libwebsockets.h>
 #include <stdlib.h>
-#include <signal.h>
 #include <string.h>
 
 /* storage */
@@ -27,13 +29,15 @@ void __cock_alarm(void) {
     }
 
     setitimer(ITIMER_REAL, ttwait, NULL);
+    free(ttwait);
 }
 
-void __sigalrm_handler(int sig) {
+void __sigalrm_handler(int) {
     struct timer_data__tth *curr = timer;
     timer = timer->timer_list;
 
     curr->handler(curr->args);
+    free(curr->args);
     free(curr->time);
     free(curr);
 
@@ -100,6 +104,16 @@ int tth_set_timeout(struct timeval *time, alarmhandler_t handler, void *args) {
 
 int tth_timer_init(void) {
     timer = NULL;
-    signal(SIGALRM, __sigalrm_handler);
+    struct sigaction *act;
+    act = malloc(sizeof(struct sigaction));
+    if (!act) {
+        lwsl_user("OOM\n");
+        return 1;
+    }
+    memset(act, 0, sizeof(struct sigaction));
+    act->sa_handler = __sigalrm_handler;
+    /* signal(SIGALRM, __sigalrm_handler); */
+    sigaction(SIGALRM, act, NULL);
+    free(act);
     return 0;
 }

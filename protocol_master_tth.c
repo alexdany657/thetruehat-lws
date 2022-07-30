@@ -49,8 +49,6 @@ struct per_session_data_http__mas {
 /* one of these is created for each client connecting to us */
 
 struct per_session_data__mas {
-    int is_server; /* flag that shows that this pss is server pss */
-    int should_close; /* flag that shows that connection should close, checked on WRITABLE callback */
     struct per_session_data__mas *pss_list; /* if server */
     struct lws *wsi; /* if server */
     struct lws_client_connect_info i; /* if server */
@@ -62,6 +60,9 @@ struct per_session_data__mas {
     struct msg__mas *to_msg_frag_list; /* list of recieved fragments to real client */
     struct msg__mas *from_msg_list; /* list of messages recieved from real client (need to be sent to backend) */
     struct msg__mas *to_msg_list; /* list of messages recieved from backend (need to be sent to real client) */
+    int is_rel_closed:1; /* flag that shows that relative (parent or sibling) pss is already closed */
+    int is_server:1; /* flag that shows that this pss is server pss */
+    int should_close:1; /* flag that shows that connection should close, checked on WRITABLE callback */
 };
 
 /* one of these is created for each vhost our protocol is used with */
@@ -75,8 +76,18 @@ struct per_vhost_data__mas {
 };
 
 /* storage for keys */
-
 static struct key__mas *key_list = NULL;
+
+static void clear_key_list(void) {
+    struct key__mas *tmp;
+    tmp = key_list;
+    while (tmp) {
+        void *_tmp = tmp;
+        free(tmp->key);
+        tmp = tmp->key_list;
+        free(_tmp);
+    }
+}
 
 void __close(void *_vhd, void *_pss) {
     struct per_vhost_data__mas *vhd = (struct per_vhost_data__mas *)_vhd;
@@ -131,7 +142,7 @@ static void connection_attempt_mas(void *_vhd, void *_pss, void *_key) {
         memcpy(new_key->key, key, strnlen(key, MAX_KEY_LENGTH));
         *(new_key->key + strnlen(key, MAX_KEY_LENGTH)) = 0;
 
-        char *mas_port = malloc(sizeof(char) * snprintf(NULL, 0, "%i", lws_get_vhost_listen_port(vhd->vhost)));
+        char *mas_port = malloc(sizeof(char) * (snprintf(NULL, 0, "%i", lws_get_vhost_listen_port(vhd->vhost)) + 1));
         if (!mas_port) {
             lwsl_user("OOM: dropping\n");
             return;
@@ -142,8 +153,10 @@ static void connection_attempt_mas(void *_vhd, void *_pss, void *_key) {
         pid_t pid = fork();
         if (pid == 0) {
             /* execl("/usr/bin/ssh", "ssh", "-l", "thehat", "localhost", "/home/thehat/bin/start_tth", "0", NULL); */
-            execl("/usr/bin/ssh", "ssh", "-l", USERNAME, "localhost", EXEC_PATH, "0", new_key->key, mas_port, NULL);
+            /* execl("/usr/bin/ssh", "ssh", "-l", USERNAME, "localhost", EXEC_PATH, "0", new_key->key, mas_port, NULL); */
+            execl(EXEC_PATH, "start_tth", "0", new_key->key, mas_port, NULL);
         }
+        lwsl_warn("Srated room server (pid: %i, key: %s)\n", pid, new_key->key);
         free(mas_port);
 
         lws_ll_fwd_insert(new_key, key_list, key_list);
@@ -151,7 +164,12 @@ static void connection_attempt_mas(void *_vhd, void *_pss, void *_key) {
     }
 
     /* FIXME: used same ptr, verify that is't ok */
-    pss->key = cur_key->key;
+    pss->key = malloc(sizeof(char) * (strlen(key) + 1));
+    if (!pss->key) {
+        lwsl_user("OOM: dropping\n");
+        __close(vhd, pss);
+    }
+    strcpy(pss->key, key);
     lwsl_warn("key: %s, len: %li\n", pss->key, strlen(pss->key));
 
     if (!cur_key->port) {
@@ -204,6 +222,7 @@ static int callback_http_mas(struct lws *wsi, enum lws_callback_reasons reason, 
             break;
 
         case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
+            /* TODO: check that it never fires and remove */
             if (pss->spa && lws_spa_destroy(pss->spa)) {
                 return -1;
             }
@@ -246,6 +265,7 @@ static int callback_http_mas(struct lws *wsi, enum lws_callback_reasons reason, 
 
                         /* TODO: notify everyone (server only) on vhost to connect (if not and have the same key) */
 
+                        free(_port_s);
                         lws_return_http_status(wsi, 202, NULL);
                     }
                 }
@@ -253,6 +273,12 @@ static int callback_http_mas(struct lws *wsi, enum lws_callback_reasons reason, 
             }
 
             if (pss->spa && lws_spa_destroy(pss->spa)) {
+                return -1;
+            }
+            break;
+
+        case LWS_CALLBACK_CLOSED_HTTP:
+            if (pss && pss->spa && lws_spa_destroy(pss->spa)) {
                 return -1;
             }
             break;
@@ -269,23 +295,31 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
 
     switch (reason) {
         case LWS_CALLBACK_PROTOCOL_INIT:
+            lwsl_warn("%s\n", "LWS_CALLBACK_PROTOCOL_INIT");
             vhd = lws_protocol_vh_priv_zalloc(lws_get_vhost(wsi), lws_get_protocol(wsi), sizeof(struct per_vhost_data__mas));
             vhd->context = lws_get_context(wsi);
             vhd->protocol = lws_get_protocol(wsi);
             vhd->vhost = lws_get_vhost(wsi);
             break;
 
+        case LWS_CALLBACK_PROTOCOL_DESTROY:
+            lwsl_warn("%s\n", "LWS_CALLBACK_PROTOCOL_DESTROY");
+            break;
+
         case LWS_CALLBACK_ESTABLISHED:
+            lwsl_warn("%s\n", "LWS_CALLBACK_ESTABLISHED");
             /* add ourselves to the list of live pss held in the vhd */
             lws_ll_fwd_insert(pss, pss_list, vhd->pss_list);
             pss->pss_list = NULL;
             pss->is_server = 1;
             pss->should_close = 0;
+            pss->is_rel_closed = 0;
             pss->wsi = wsi;
             pss->from_msg_frag_list = NULL;
             pss->to_msg_frag_list = NULL;
             pss->from_msg_list = NULL;
             pss->to_msg_list = NULL;
+            pss->child_pss = NULL;
             char *key_buff = malloc(sizeof(char) * (4 + MAX_KEY_LENGTH));
             if (!key_buff) {
                 lwsl_user("OOM: dropping\n");
@@ -304,14 +338,22 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
             break;
 
         case LWS_CALLBACK_CLOSED:
+            lwsl_warn("%s\n", "LWS_CALLBACK_CLOSED");
             lwsl_user("pss: close: wsi: %p\n", pss->wsi);
+            if (!pss->is_rel_closed && pss->child_pss) {
+                pss->child_pss->is_rel_closed = 1;
+                __close(vhd, pss);
+            }
             /* lws_close_reason(pss->client_wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0); */
-            __close(vhd, pss);
             /* remove our closing pss from the list of live pss */
             lws_ll_fwd_remove(struct per_session_data__mas, pss_list, pss, vhd->pss_list);
+            if (pss->key) {
+                free(pss->key);
+            }
             break;
 
         case LWS_CALLBACK_SERVER_WRITEABLE:
+            lwsl_warn("%s\n", "LWS_CALLBACK_SERVER_WRITEABLE");
             {
                 if (pss->should_close) {
                     lws_close_reason(pss->wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0);
@@ -330,6 +372,7 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                         lwsl_err("ERROR %d writing to ws socket\n", m);
                         return -1;
                     }
+                    free(tmp->payload);
                     free(tmp);
                     pss->to_msg_list = NULL;
                     return 0;
@@ -344,6 +387,7 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                     lwsl_err("ERROR %d writing to ws socket\n", m);
                     return -1;
                 }
+                free(last->payload);
                 free(last);
                 tmp->msg_list = NULL;
                 lws_callback_on_writable(pss->wsi);
@@ -351,6 +395,7 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
             break;
 
         case LWS_CALLBACK_RECEIVE:
+            lwsl_warn("%s\n", "LWS_CALLBACK_RECEIVE");
             {
                 /* lwsl_warn("LWS_CALLBACK_RECEIVE\n"); */
                 /* lwsl_warn("%i %i\n", lws_is_first_fragment(wsi), lws_is_final_fragment(wsi)); */
@@ -376,6 +421,8 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                     ___ll_bck_insert(struct msg__mas, curr_msg, msg_list, pss->from_msg_frag_list);
                 }
                 if (final) {
+                    char fl = 0;
+                    void *old_in;
                     if (!first) {
                         int summ_len = 0;
                         lws_start_foreach_llp(struct msg__mas **, ppmf, pss->from_msg_frag_list) {
@@ -391,6 +438,8 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                             memcpy(all_payload + summ_len, (*ppmf)->payload, (*ppmf)->len);
                             summ_len += (*ppmf)->len;
                         } lws_end_foreach_llp(ppmf, msg_list);
+                        fl = 1;
+                        old_in = in;
                         in = all_payload;
                         len = summ_len;
                         struct msg__mas *tmp = pss->from_msg_frag_list;
@@ -420,18 +469,26 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                     if (pss->client_wsi) {
                         lws_callback_on_writable(pss->client_wsi);
                     }
+                    if (fl) {
+                        free(in);
+                        in = old_in;
+                    }
                 }
             }
             break;
         
         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+            lwsl_warn("%s\n", "LWS_CALLBACK_CLIENT_CONNECTION_ERROR");
             lwsl_err("CLIENT_CONNECTION_ERROR: %s\n", in ? (char *)in : "(null)");
             lwsl_user("pss: %p, client: %p\n", pss ? pss->parent_pss : NULL, pss);
             break;
 
         case LWS_CALLBACK_CLIENT_ESTABLISHED:
+            lwsl_warn("%s\n", "LWS_CALLBACK_CLIENT_ESTABLISHED");
             lwsl_user("%s: established\n", __func__);
             pss->is_server = 0;
+            pss->is_rel_closed = 0;
+            pss->should_close = 0;
             pss->wsi = wsi;
             lws_start_foreach_llp (struct per_session_data__mas **, ppss, vhd->pss_list) {
                 /* lwsl_warn("%i, %p == %p, %i\n", (*ppss)->is_server, (*ppss)->client_wsi, wsi, (*ppss)->client_wsi == wsi); */
@@ -445,6 +502,7 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
             break;
 
         case LWS_CALLBACK_CLIENT_WRITEABLE:
+            lwsl_warn("%s\n", "LWS_CALLBACK_CLIENT_WRITEABLE");
             {
                 if (pss->should_close) {
                     lws_close_reason(pss->wsi, LWS_CLOSE_STATUS_NORMAL, NULL, 0);
@@ -465,6 +523,7 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                         lwsl_err("ERROR %d writing to ws socket\n", m);
                         return -1;
                     }
+                    free(tmp->payload);
                     free(tmp);
                     pss->from_msg_list = NULL;
                     return 0;
@@ -479,6 +538,7 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                     lwsl_err("ERROR %d writing to ws socket\n", m);
                     return -1;
                 }
+                free(last->payload);
                 free(last);
                 tmp->msg_list = NULL;
                 lws_callback_on_writable(pss->client_wsi);
@@ -486,6 +546,7 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
             break;
 
         case LWS_CALLBACK_CLIENT_RECEIVE:
+            lwsl_warn("%s\n", "LWS_CALLBACK_CLIENT_RECEIVE");
             {
                 pss = pss->parent_pss;
                 /* lwsl_warn("LWS_CALLBACK_CLIENT_RECEIVE\n"); */
@@ -512,24 +573,29 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                     ___ll_bck_insert(struct msg__mas, curr_msg, msg_list, pss->to_msg_frag_list);
                 }
                 if (final) {
+                    struct msg__mas *cur_msg = malloc(sizeof(struct msg__mas));
+                    if (!cur_msg) {
+                        lwsl_user("OOM: dropping\n");
+                        return 1;
+                    }
+                    memset(cur_msg, 0, sizeof(struct msg__mas));
                     if (!first) {
                         int summ_len = 0;
                         /* __print_ll(struct msg__mas, pss->to_msg_frag_list, msg_list); */
                         lws_start_foreach_llp(struct msg__mas **, ppmf, pss->to_msg_frag_list) {
                             summ_len += (*ppmf)->len;
                         } lws_end_foreach_llp(ppmf, msg_list);
-                        char *all_payload = malloc(summ_len);
-                        if (!all_payload) {
+                        cur_msg->payload = malloc(summ_len + LWS_PRE);
+                        if (!cur_msg->payload) {
                             lwsl_user("OOM: dropping\n");
                             return 1;
                         }
-                        summ_len = 0;
+                        summ_len = LWS_PRE;
                         lws_start_foreach_llp(struct msg__mas **, ppmf, pss->to_msg_frag_list) {
-                            memcpy(all_payload + summ_len, (*ppmf)->payload, (*ppmf)->len);
+                            memcpy(cur_msg->payload + summ_len, (*ppmf)->payload, (*ppmf)->len);
                             summ_len += (*ppmf)->len;
                         } lws_end_foreach_llp(ppmf, msg_list);
-                        in = all_payload;
-                        len = summ_len;
+                        cur_msg->len = summ_len - LWS_PRE;
                         struct msg__mas *tmp = pss->to_msg_frag_list;
                         while (tmp) {
                             free(tmp->payload);
@@ -538,20 +604,15 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
                             free(_tmp);
                         }
                         pss->to_msg_frag_list = NULL;
+                    } else {
+                        cur_msg->payload = malloc(len + LWS_PRE);
+                        if (!cur_msg->payload) {
+                            lwsl_user("OOM: dropping\n");
+                            return 1;
+                        }
+                        memcpy(cur_msg->payload + LWS_PRE, in, len);
+                        cur_msg->len = len;
                     }
-                    struct msg__mas *cur_msg = malloc(sizeof(struct msg__mas));
-                    if (!cur_msg) {
-                        lwsl_user("OOM: dropping\n");
-                        return 1;
-                    }
-                    memset(cur_msg, 0, sizeof(struct msg__mas));
-                    cur_msg->payload = malloc(len + LWS_PRE);
-                    if (!cur_msg->payload) {
-                        lwsl_user("OOM: dropping\n");
-                        return 1;
-                    }
-                    memcpy(cur_msg->payload + LWS_PRE, in, len);
-                    cur_msg->len = len;
                     /* __print_ll(struct msg__mas, pss->to_msg_list, msg_list); */
                     ___ll_bck_insert(struct msg__mas, cur_msg, msg_list, pss->to_msg_list);
                     lws_callback_on_writable(pss->wsi);
@@ -560,18 +621,30 @@ static int callback_mas(struct lws *wsi, enum lws_callback_reasons reason, void 
             break;
 
         case LWS_CALLBACK_CLIENT_CLOSED:
+            lwsl_warn("%s\n", "LWS_CALLBACK_CLIENT_CLOSED");
+            /*lwsl_warn("Client wsi: %p, server wsi: %p\n", pss->wsi, pss->parent_pss->wsi);*/
+            if (pss->is_rel_closed) {
+                break;
+            }
             pss = pss->parent_pss;
+            if (!pss) {
+                break;
+            }
+            pss->is_rel_closed = 1;
             pss->client_wsi = NULL;
             lwsl_user("callback: client close\n");
             __close(vhd, pss);
             break;
 
         case LWS_CALLBACK_WSI_DESTROY:
+            lwsl_warn("%s\n", "LWS_CALLBACK_WSI_DESTROY");
             /* free everything allocated by this connection */
             {
+                lwsl_warn("WSI_DESTROY\n");
                 if (!pss) {
                     break;
                 }
+                lwsl_warn("pss: %p, wsi: %p, (server: %i)\n", pss, pss->wsi, pss->is_server);
                 struct msg__mas *tmp = pss->to_msg_frag_list;
                 while (tmp) {
                     free(tmp->payload);
